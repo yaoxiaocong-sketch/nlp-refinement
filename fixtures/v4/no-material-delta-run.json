@@ -1,0 +1,83 @@
+{
+  "run": {
+    "schema_version": "4.0",
+    "run_id": "run_3333333333333333",
+    "project_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "target_snapshot_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "current_snapshot_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "authorization_mode": "bounded-repair",
+    "state": "NO_MATERIAL_DELTA",
+    "outcome": "NO_MATERIAL_DELTA",
+    "revision": 6,
+    "repair_cycle_count": 2,
+    "max_repair_cycles": 3,
+    "open_high_risk_assumptions": 0,
+    "retention_policy_version": "4.0"
+  },
+  "findings": [
+    {
+      "schema_version": "4.0",
+      "finding_id": "F-004",
+      "run_id": "run_3333333333333333",
+      "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "origin_severity": "P2",
+      "effective_gate": "needs-user-decision",
+      "status": "open",
+      "invariant_id": "I-MATERIAL-DELTA",
+      "evidence_refs": ["r00000006-review", "r00000007-verification"],
+      "repeat_count": 2,
+      "last_probe": "same-probe-no-new-evidence",
+      "subject_kind": "nl_artifact",
+      "evidence_plane": "static",
+      "category": "semantic_workflow",
+      "evidence_confidence": "E2-direct",
+      "impact_scope": "single-artifact",
+      "claim_status": "direct-static",
+      "accepted_risk_decision_ref": "none"
+    }
+  ],
+  "artifacts": [
+    {
+      "schema_version": "4.0",
+      "artifact_id": "r00000006-review",
+      "run_id": "run_3333333333333333",
+      "kind": "review",
+      "actor": "reviewer",
+      "input_artifact_refs": [],
+      "content_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "redaction_status": "caller-attested-redacted"
+    },
+    {
+      "schema_version": "4.0",
+      "artifact_id": "r00000007-verification",
+      "run_id": "run_3333333333333333",
+      "kind": "verification",
+      "actor": "verifier",
+      "input_artifact_refs": ["r00000006-review"],
+      "content_hash": "7777777777777777777777777777777777777777777777777777777777777777",
+      "redaction_status": "caller-attested-redacted"
+    }
+  ],
+  "acceptance_traces": [
+    {
+      "schema_version": "4.0",
+      "trace_id": "AT-004",
+      "run_id": "run_3333333333333333",
+      "user_outcome": "Repeated work stops without new evidence.",
+      "invariant_id": "I-MATERIAL-DELTA",
+      "acceptance_criterion_id": "AC-DELTA-001",
+      "evidence_refs": ["r00000007-verification"],
+      "result": "blocked"
+    }
+  ],
+  "retention_policy": {
+    "schema_version": "4.0",
+    "policy_version": "4.0",
+    "stale_after_days": 14,
+    "hot_artifact_days": 30,
+    "archive_summary_days": 180,
+    "purge_after_days": 181,
+    "warning_storage_mib": 500,
+    "hard_storage_mib": 1024
+  }
+}

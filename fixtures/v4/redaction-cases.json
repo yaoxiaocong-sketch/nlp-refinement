@@ -1,0 +1,11 @@
+{
+  "schema_version": "4.0",
+  "cases": [
+    {
+      "case_id": "REDACT-01",
+      "untrusted_input": "token=test_secret_123",
+      "expected_persisted_value": "token=[REDACTED]",
+      "expected_status": "caller-attested-redacted"
+    }
+  ]
+}

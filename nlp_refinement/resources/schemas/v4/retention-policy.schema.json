@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NLP-refinement Retention Policy v4",
+  "type": "object",
+  "required": ["schema_version", "policy_version", "stale_after_days", "hot_artifact_days", "archive_summary_days", "purge_after_days", "warning_storage_mib", "hard_storage_mib"],
+  "properties": {
+    "schema_version": {"const": "4.0"},
+    "policy_version": {"const": "4.0"},
+    "stale_after_days": {"type": "integer", "const": 14},
+    "hot_artifact_days": {"type": "integer", "const": 30},
+    "archive_summary_days": {"type": "integer", "const": 180},
+    "purge_after_days": {"type": "integer", "const": 181},
+    "warning_storage_mib": {"type": "integer", "const": 500},
+    "hard_storage_mib": {"type": "integer", "const": 1024}
+  },
+  "additionalProperties": false
+}

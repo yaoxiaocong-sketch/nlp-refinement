@@ -1,0 +1,83 @@
+{
+  "run": {
+    "schema_version": "4.0",
+    "run_id": "run_2222222222222222",
+    "project_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "target_snapshot_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "current_snapshot_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "authorization_mode": "review-only",
+    "state": "PASS_WITH_ACCEPTED_RISK",
+    "outcome": "PASS_WITH_ACCEPTED_RISK",
+    "revision": 5,
+    "repair_cycle_count": 0,
+    "max_repair_cycles": 3,
+    "open_high_risk_assumptions": 0,
+    "retention_policy_version": "4.0"
+  },
+  "findings": [
+    {
+      "schema_version": "4.0",
+      "finding_id": "F-003",
+      "run_id": "run_2222222222222222",
+      "fingerprint": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "origin_severity": "P2",
+      "effective_gate": "recordable-risk",
+      "status": "accepted-risk",
+      "invariant_id": "I-EXAMPLE-COVERAGE",
+      "evidence_refs": ["r00000004-review", "r00000005-decision"],
+      "repeat_count": 0,
+      "last_probe": "user-risk-decision",
+      "subject_kind": "nl_artifact",
+      "evidence_plane": "static",
+      "category": "semantic_workflow",
+      "evidence_confidence": "E2-direct",
+      "impact_scope": "single-artifact",
+      "claim_status": "direct-static",
+      "accepted_risk_decision_ref": "r00000005-decision"
+    }
+  ],
+  "artifacts": [
+    {
+      "schema_version": "4.0",
+      "artifact_id": "r00000004-review",
+      "run_id": "run_2222222222222222",
+      "kind": "review",
+      "actor": "reviewer",
+      "input_artifact_refs": [],
+      "content_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "redaction_status": "caller-attested-redacted"
+    },
+    {
+      "schema_version": "4.0",
+      "artifact_id": "r00000005-decision",
+      "run_id": "run_2222222222222222",
+      "kind": "decision",
+      "actor": "user",
+      "input_artifact_refs": ["r00000004-review"],
+      "content_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "redaction_status": "caller-attested-redacted"
+    }
+  ],
+  "acceptance_traces": [
+    {
+      "schema_version": "4.0",
+      "trace_id": "AT-003",
+      "run_id": "run_2222222222222222",
+      "user_outcome": "Required review contract remains valid.",
+      "invariant_id": "I-EXAMPLE-COVERAGE",
+      "acceptance_criterion_id": "AC-COVERAGE-001",
+      "evidence_refs": ["r00000004-review"],
+      "result": "passed"
+    }
+  ],
+  "retention_policy": {
+    "schema_version": "4.0",
+    "policy_version": "4.0",
+    "stale_after_days": 14,
+    "hot_artifact_days": 30,
+    "archive_summary_days": 180,
+    "purge_after_days": 181,
+    "warning_storage_mib": 500,
+    "hard_storage_mib": 1024
+  }
+}

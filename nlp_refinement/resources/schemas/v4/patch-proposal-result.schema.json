@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NLP-refinement Human-only Patch Proposal Result v4",
+  "type": "object",
+  "required": ["schema_version", "phase_name", "proposer_id", "summary", "base_snapshot_hash", "no_target_write_attestation", "proposals"],
+  "properties": {
+    "schema_version": {"const": "4.0"},
+    "phase_name": {"const": "patch-proposal"},
+    "proposer_id": {"type": "string", "minLength": 1},
+    "summary": {"type": "string", "minLength": 1},
+    "base_snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "no_target_write_attestation": {"const": true},
+    "proposals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "target_reference", "unified_diff", "rationale", "target_invariants", "causal_claim", "causal_evidence_refs", "authorization_basis", "verification_plan", "regression_plan", "known_risks", "alternatives_considered", "claims_not_yet_verified", "assessment"],
+        "properties": {
+          "finding_id": {"type": "string", "minLength": 1},
+          "target_reference": {"type": "string", "minLength": 1},
+          "unified_diff": {"type": "string", "minLength": 1},
+          "rationale": {"type": "string", "minLength": 1},
+          "target_invariants": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "causal_claim": {"type": "string", "minLength": 1},
+          "causal_evidence_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "authorization_basis": {"const": "review-only-human-application"},
+          "verification_plan": {"type": "string", "minLength": 1},
+          "regression_plan": {"type": "string", "minLength": 1},
+          "known_risks": {"type": "string", "minLength": 1},
+          "alternatives_considered": {"type": "string", "minLength": 1},
+          "claims_not_yet_verified": {"type": "string", "minLength": 1},
+          "assessment": {
+            "type": "object",
+            "required": ["assessor_id", "evidence_refs", "scores", "total_score", "recommendation", "runtime_effectiveness"],
+            "properties": {
+              "assessor_id": {"type": "string", "minLength": 1},
+              "evidence_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+              "scores": {
+                "type": "object",
+                "required": ["coverage", "causal", "scope", "verification", "regression", "evidence", "alternatives", "clarity"],
+                "properties": {
+                  "coverage": {"type": "integer", "minimum": 0, "maximum": 20},
+                  "causal": {"type": "integer", "minimum": 0, "maximum": 20},
+                  "scope": {"type": "integer", "minimum": 0, "maximum": 15},
+                  "verification": {"type": "integer", "minimum": 0, "maximum": 15},
+                  "regression": {"type": "integer", "minimum": 0, "maximum": 10},
+                  "evidence": {"type": "integer", "minimum": 0, "maximum": 10},
+                  "alternatives": {"type": "integer", "minimum": 0, "maximum": 5},
+                  "clarity": {"type": "integer", "minimum": 0, "maximum": 5}
+                },
+                "additionalProperties": false
+              },
+              "total_score": {"type": "integer", "minimum": 0, "maximum": 100},
+              "recommendation": {"type": "string", "enum": ["recommend", "needs-user-decision", "not-recommended"]},
+              "runtime_effectiveness": {"const": "unverified"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": "4.0",
+  "cases": [
+    {
+      "case_id": "LEASE-01",
+      "description": "A second active session cannot acquire the same run lease.",
+      "existing_lease": "active",
+      "request": "acquire",
+      "expected": "LEASE_CONFLICT"
+    },
+    {
+      "case_id": "LEASE-02",
+      "description": "An expired lease may be replaced by one new owner.",
+      "existing_lease": "expired",
+      "request": "acquire",
+      "expected": "LEASE_ACQUIRED"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NLP-refinement Run v4",
+  "type": "object",
+  "required": ["schema_version", "run_id", "project_key", "target_snapshot_hash", "current_snapshot_hash", "authorization_mode", "state", "outcome", "revision", "repair_cycle_count", "max_repair_cycles", "open_high_risk_assumptions", "retention_policy_version"],
+  "properties": {
+    "schema_version": {"const": "4.0"},
+    "run_id": {"type": "string", "pattern": "^run_[a-z0-9]{12,64}$"},
+    "project_key": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "target_snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "current_snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "authorization_mode": {"type": "string", "enum": ["review-only", "bounded-repair", "repair-and-add-tests"]},
+    "state": {"type": "string", "enum": ["DRAFT", "READY", "REVIEWING", "TRIAGING", "REPAIRING", "VERIFYING", "REREVIEWING", "INTEGRITY_CHECK", "ROLLING_BACK", "SNAPSHOT_STALE", "STALE", "PASS", "PASS_WITH_ACCEPTED_RISK", "NEEDS_USER_DECISION", "NO_MATERIAL_DELTA", "BLOCKED", "CANCELLED"]},
+    "outcome": {"type": "string", "enum": ["IN_PROGRESS", "PASS", "PASS_WITH_ACCEPTED_RISK", "NEEDS_USER_DECISION", "NO_MATERIAL_DELTA", "SNAPSHOT_STALE", "BLOCKED", "CANCELLED", "STALE"]},
+    "revision": {"type": "integer", "minimum": 0},
+    "repair_cycle_count": {"type": "integer", "minimum": 0},
+    "max_repair_cycles": {"type": "integer", "minimum": 1, "maximum": 5},
+    "open_high_risk_assumptions": {"type": "integer", "minimum": 0},
+    "retention_policy_version": {"const": "4.0"}
+  },
+  "additionalProperties": false
+}

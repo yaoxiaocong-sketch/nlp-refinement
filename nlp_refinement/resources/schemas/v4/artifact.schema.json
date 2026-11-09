@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NLP-refinement Artifact v4",
+  "type": "object",
+  "required": ["schema_version", "artifact_id", "run_id", "kind", "actor", "input_artifact_refs", "content_hash", "redaction_status"],
+  "properties": {
+    "schema_version": {"const": "4.0"},
+    "artifact_id": {"type": "string", "pattern": "^r[0-9]{8}-(review|repair|verification|decision|integrity|reclassification)$"},
+    "run_id": {"type": "string", "pattern": "^run_[a-z0-9]{12,64}$"},
+    "kind": {"type": "string", "enum": ["review", "repair", "verification", "decision", "integrity", "reclassification"]},
+    "actor": {"type": "string", "enum": ["coordinator", "reviewer", "fixer", "verifier", "integrity-gate", "user"]},
+    "input_artifact_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "content_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "redaction_status": {"type": "string", "enum": ["system-metadata", "caller-attested-redacted"]}
+  },
+  "additionalProperties": false
+}

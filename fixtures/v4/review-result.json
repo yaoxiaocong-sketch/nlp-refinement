@@ -1,0 +1,24 @@
+{
+  "schema_version": "4.0",
+  "phase_name": "review",
+  "reviewer_id": "fixture-reviewer",
+  "summary": "A controlled review result for the M3 adapter.",
+  "findings": [
+    {
+      "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "origin_severity": "P1",
+      "effective_gate": "blocking",
+      "invariant_id": "I-REVIEW",
+      "last_probe": "review-probe-001",
+      "subject_kind": "nl_artifact",
+      "evidence_plane": "static",
+      "category": "semantic_workflow",
+      "evidence_confidence": "E2-direct",
+      "impact_scope": "single-artifact",
+      "claim_status": "direct-static",
+      "statement": "The fixture found a reviewable protocol concern.",
+      "evidence": "Controlled fixture evidence.",
+      "recommendation": "Record it for triage."
+    }
+  ]
+}

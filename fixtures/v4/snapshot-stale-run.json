@@ -1,0 +1,29 @@
+{
+  "run": {
+    "schema_version": "4.0",
+    "run_id": "run_4444444444444444",
+    "project_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "target_snapshot_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "current_snapshot_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "authorization_mode": "bounded-repair",
+    "state": "SNAPSHOT_STALE",
+    "outcome": "SNAPSHOT_STALE",
+    "revision": 7,
+    "repair_cycle_count": 1,
+    "max_repair_cycles": 3,
+    "open_high_risk_assumptions": 0,
+    "retention_policy_version": "4.0"
+  },
+  "findings": [],
+  "artifacts": [],
+  "retention_policy": {
+    "schema_version": "4.0",
+    "policy_version": "4.0",
+    "stale_after_days": 14,
+    "hot_artifact_days": 30,
+    "archive_summary_days": 180,
+    "purge_after_days": 181,
+    "warning_storage_mib": 500,
+    "hard_storage_mib": 1024
+  }
+}

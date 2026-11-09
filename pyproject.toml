@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nlp-refinement-cli"
+version = "0.8.2"
+description = "Durable-local, review-only refinement for natural-language-programming artifacts."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+nlp-refinement = "nlp_refinement.refine:main"
+nlp-refinement-host = "nlp_refinement.host_refine:main"
+nlp-refinement-doe-prune = "nlp_refinement.doe_receipt_retention:main"
+
+[tool.setuptools.packages.find]
+include = ["nlp_refinement*"]
+
+[tool.setuptools.package-data]
+"nlp_refinement.resources" = ["schemas/v4/*.json", "prompts/*.md"]

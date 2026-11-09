@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NLP-refinement Review Result v4",
+  "type": "object",
+  "required": ["schema_version", "phase_name", "reviewer_id", "summary", "findings"],
+  "properties": {
+    "schema_version": {"const": "4.0"},
+    "phase_name": {"const": "review"},
+    "reviewer_id": {"type": "string", "minLength": 1},
+    "summary": {"type": "string", "minLength": 1},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fingerprint", "origin_severity", "effective_gate", "invariant_id", "last_probe", "statement", "evidence", "recommendation", "subject_kind", "evidence_plane", "category", "evidence_confidence", "impact_scope", "claim_status"],
+        "properties": {
+          "fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "origin_severity": {"type": "string", "enum": ["P0", "P1", "P2", "P3"]},
+          "effective_gate": {"type": "string", "enum": ["blocking", "needs-user-decision", "recordable-risk"]},
+          "invariant_id": {"type": "string", "minLength": 1},
+          "last_probe": {"type": "string", "minLength": 1},
+          "statement": {"type": "string", "minLength": 1},
+          "evidence": {"type": "string", "minLength": 1},
+          "recommendation": {"type": "string", "minLength": 1},
+          "subject_kind": {"type": "string", "enum": ["nl_artifact", "nl_host_boundary"]},
+          "evidence_plane": {"type": "string", "enum": ["static", "runtime", "hybrid"]},
+          "category": {"type": "string", "enum": ["format_and_encoding", "schema_contract", "layout_and_discovery", "reference_integrity", "semantic_workflow", "safety_and_governance", "verification_design", "load_and_discovery", "instruction_adherence", "state_behavior", "outcome_verification", "safety_behavior"]},
+          "evidence_confidence": {"type": "string", "enum": ["E1-inferred", "E2-direct", "E3-corroborated"]},
+          "impact_scope": {"type": "string", "enum": ["single-artifact", "cross-artifact", "core-workflow", "durable-state", "security-boundary"]},
+          "claim_status": {"type": "string", "enum": ["inferred", "direct-static", "observed-runtime", "corroborated"]}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

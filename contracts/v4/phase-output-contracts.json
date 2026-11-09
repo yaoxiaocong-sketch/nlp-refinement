@@ -1,0 +1,31 @@
+{
+  "registry_version": "1.0",
+  "contracts": [
+    {
+      "contract_id": "review-result/v4",
+      "schema_path": "nlp_refinement/resources/schemas/v4/review-result.schema.json",
+      "prompt_path": "nlp_refinement/resources/prompts/review-phase.v4.md",
+      "valid_fixture_path": "fixtures/v4/review-result.json",
+      "semantic_rules": [
+        {"rule_id": "review.nonblank-strings.v1", "owner": "review_adapter", "prompt_requirement": "Every required string must contain non-whitespace text.", "negative_case_ids": ["review-whitespace-summary"]},
+        {"rule_id": "review.classification-coherence.v1", "owner": "review_adapter", "prompt_requirement": "Use only subject-kind, evidence-plane, and category combinations permitted by the v4 review contract.", "negative_case_ids": ["review-static-category-runtime-plane"]},
+        {"rule_id": "review.assessment-coherence.v1", "owner": "review_adapter", "prompt_requirement": "P0 must be blocking with direct or corroborated evidence", "negative_case_ids": ["review-p0-nonblocking"]},
+        {"rule_id": "review.unique-fingerprint.v1", "owner": "review_adapter", "prompt_requirement": "Each emitted fingerprint must be unique within this review result.", "negative_case_ids": ["review-duplicate-fingerprint"]}
+      ]
+    },
+    {
+      "contract_id": "patch-proposal-result/v4",
+      "schema_path": "nlp_refinement/resources/schemas/v4/patch-proposal-result.schema.json",
+      "prompt_path": "nlp_refinement/resources/prompts/patch-proposal-phase.v4.md",
+      "valid_fixture_path": "fixtures/v4/patch-proposal-result.json",
+      "semantic_rules": [
+        {"rule_id": "proposal.nonblank-strings.v1", "owner": "patch_proposal_adapter", "prompt_requirement": "Every required string must contain non-whitespace text.", "negative_case_ids": ["proposal-whitespace-summary"]},
+        {"rule_id": "proposal.max-count.v1", "owner": "patch_proposal_adapter", "prompt_requirement": "Emit at most one proposal for each finding_id and no more than 50 proposals.", "negative_case_ids": ["proposal-count-exceeded"]},
+        {"rule_id": "proposal.unique-finding.v1", "owner": "patch_proposal_adapter", "prompt_requirement": "Emit at most one proposal for each finding_id and no more than 50 proposals.", "negative_case_ids": ["proposal-duplicate-finding"]},
+        {"rule_id": "proposal.target-reference.v1", "owner": "patch_proposal_adapter", "prompt_requirement": "target_reference must use non-empty relative POSIX components and contain no backslash, . or .. component.", "negative_case_ids": ["proposal-traversal-reference", "proposal-double-slash-reference"]},
+        {"rule_id": "proposal.unified-diff.v1", "owner": "patch_proposal_adapter", "prompt_requirement": "A unified_diff must end with a newline, use paired --- and +++ file headers, and use valid @@ hunk headers.", "negative_case_ids": ["proposal-missing-final-newline", "proposal-malformed-hunk", "proposal-orphan-no-newline-marker"]},
+        {"rule_id": "proposal.assessment.v1", "owner": "patch_proposal_adapter", "prompt_requirement": "The assessment score total must equal the sum of its scorecard dimensions.", "negative_case_ids": ["proposal-total-score-mismatch"]}
+      ]
+    }
+  ]
+}

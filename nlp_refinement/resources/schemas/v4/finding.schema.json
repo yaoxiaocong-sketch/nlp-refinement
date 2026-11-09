@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NLP-refinement Finding v4",
+  "type": "object",
+  "required": ["schema_version", "finding_id", "run_id", "fingerprint", "origin_severity", "effective_gate", "status", "invariant_id", "evidence_refs", "repeat_count", "last_probe", "accepted_risk_decision_ref", "subject_kind", "evidence_plane", "category", "evidence_confidence", "impact_scope", "claim_status"],
+  "properties": {
+    "schema_version": {"const": "4.0"},
+    "finding_id": {"type": "string", "pattern": "^F-[0-9]{3,8}$"},
+    "run_id": {"type": "string", "pattern": "^run_[a-z0-9]{12,64}$"},
+    "fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "origin_severity": {"type": "string", "enum": ["P0", "P1", "P2", "P3"]},
+    "effective_gate": {"type": "string", "enum": ["blocking", "needs-user-decision", "recordable-risk"]},
+    "status": {"type": "string", "enum": ["open", "fixed", "verified", "retracted-with-evidence", "accepted-risk"]},
+    "invariant_id": {"type": "string", "minLength": 1},
+    "evidence_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "repeat_count": {"type": "integer", "minimum": 0},
+    "last_probe": {"type": "string", "minLength": 1},
+    "accepted_risk_decision_ref": {"type": "string", "minLength": 1},
+    "subject_kind": {"type": "string", "enum": ["nl_artifact", "nl_host_boundary"]},
+    "evidence_plane": {"type": "string", "enum": ["static", "runtime", "hybrid"]},
+    "category": {"type": "string", "enum": ["format_and_encoding", "schema_contract", "layout_and_discovery", "reference_integrity", "semantic_workflow", "safety_and_governance", "verification_design", "load_and_discovery", "instruction_adherence", "state_behavior", "outcome_verification", "safety_behavior"]},
+    "evidence_confidence": {"type": "string", "enum": ["E1-inferred", "E2-direct", "E3-corroborated"]},
+    "impact_scope": {"type": "string", "enum": ["single-artifact", "cross-artifact", "core-workflow", "durable-state", "security-boundary"]},
+    "claim_status": {"type": "string", "enum": ["inferred", "direct-static", "observed-runtime", "corroborated"]}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": "4.0",
+  "phase_name": "patch-proposal",
+  "proposer_id": "fixture-reviewer",
+  "summary": "A human must inspect and apply this patch outside NLP-refinement.",
+  "base_snapshot_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "no_target_write_attestation": true,
+  "proposals": [
+    {
+      "finding_id": "F-001",
+      "target_reference": "skills/nlp-refine/SKILL.md",
+      "unified_diff": "--- a/skills/nlp-refine/SKILL.md\n+++ b/skills/nlp-refine/SKILL.md\n@@ -1 +1 @@\n-old\n+new\n",
+      "rationale": "Make the review-only boundary easier for a human to verify.",
+      "target_invariants": ["I-REVIEW"],
+      "causal_claim": "The proposal changes the declared boundary that the finding identifies.",
+      "causal_evidence_refs": ["r00000001-review"],
+      "authorization_basis": "review-only-human-application",
+      "verification_plan": "Re-review the finding after a human applies the patch.",
+      "regression_plan": "Run the affected fixture and its regression checks.",
+      "known_risks": "Runtime effectiveness remains unverified.",
+      "alternatives_considered": "Keep the current text and accept the unresolved finding.",
+      "claims_not_yet_verified": "The diff has not been applied or executed.",
+      "assessment": {
+        "assessor_id": "independent-fixture-assessor",
+        "evidence_refs": ["r00000001-review"],
+        "scores": {
+          "coverage": 20,
+          "causal": 20,
+          "scope": 15,
+          "verification": 15,
+          "regression": 10,
+          "evidence": 10,
+          "alternatives": 5,
+          "clarity": 5
+        },
+        "total_score": 100,
+        "recommendation": "recommend",
+        "runtime_effectiveness": "unverified"
+      }
+    }
+  ]
+}

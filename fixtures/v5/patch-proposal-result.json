@@ -1,5 +1,5 @@
 {
-  "schema_version": "4.0",
+  "schema_version": "5.0",
   "phase_name": "patch-proposal",
   "proposer_id": "fixture-reviewer",
   "summary": "A human must inspect and apply this patch outside NLP-refinement.",

@@ -1,13 +1,14 @@
 {
   "name": "nlp-refinement-cli",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Durable-local, review-only refinement for natural-language-programming artifacts.",
   "skills": "./skills/",
   "requires_local_executor": true,
+  "onboardingSkill": "./skills/nlp-refine-setup/SKILL.md",
   "interface": {
     "displayName": "NLP-refinement",
     "shortDescription": "Bounded and auditable refinement loops",
-    "longDescription": "Guides durable-local review-only refinement runs through the separately installed NLP-refinement CLI, validates v4 NL-artifact reviews and human-only proposals, and can explicitly request two host threads with a requested read-only boundary while preserving SQLite receipts. Repair, MCP transport, and native-subagent guarantees remain disabled.",
+    "longDescription": "Guides durable-local review-only refinement runs through the separately installed NLP-refinement CLI, validates v5 NL-artifact reviews and human-only proposals, and can explicitly request two host threads with a requested read-only boundary while preserving SQLite receipts. Repair, MCP transport, and native-subagent guarantees remain disabled.",
     "defaultPrompt": [
       "Use $nlp-refine to start a review-only NLP-refinement run for this plugin artifact."
     ]

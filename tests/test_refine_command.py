@@ -92,7 +92,7 @@ class RefineCommandTests(unittest.TestCase):
         result.write_text(
             json.dumps(
                 {
-                    "schema_version": "4.0",
+                    "schema_version": "5.0",
                     "phase_name": "review",
                     "reviewer_id": "fixture-reviewer",
                     "summary": "Review result from a controlled fixture.",
@@ -140,7 +140,7 @@ class RefineCommandTests(unittest.TestCase):
         proposal.write_text(
             json.dumps(
                 {
-                    "schema_version": "4.0",
+                    "schema_version": "5.0",
                     "phase_name": "patch-proposal",
                     "proposer_id": "fixture-reviewer",
                     "summary": "A human must inspect and apply this proposal outside NLP-refinement.",
@@ -282,7 +282,7 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(artifacts[-1]["kind"], "review")
         self.assertEqual(artifacts[-1]["redaction_status"], "caller-attested-redacted")
         finding = StateStore(self.state_root / "state.db").list_findings(str(started["run_id"]))[0]
-        self.assertEqual(finding["schema_version"], "4.0")
+        self.assertEqual(finding["schema_version"], "5.0")
         self.assertEqual(finding["subject_kind"], "nl_artifact")
         self.assertEqual(finding["evidence_plane"], "static")
         self.assertEqual(finding["category"], "format_and_encoding")
@@ -379,7 +379,7 @@ class RefineCommandTests(unittest.TestCase):
             2,
             lease["token"],
             {
-                "schema_version": "4.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
+                "schema_version": "5.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
                 "fingerprint": "a" * 64, "origin_severity": "P1", "effective_gate": "blocking",
                 "status": "open", "invariant_id": "I-REVIEW", "evidence_refs": [artifact["artifact_id"]],
                 "repeat_count": 0, "last_probe": "review-probe-001",
@@ -502,7 +502,7 @@ class RefineCommandTests(unittest.TestCase):
             str(started["run_id"]), 1, lease["token"], "review", "reviewer", "seed evidence", now=1_001,
         )
         seed = {
-            "schema_version": "4.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
+            "schema_version": "5.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
             "fingerprint": "a" * 64, "origin_severity": "P1", "effective_gate": "blocking",
             "status": "open", "invariant_id": "I-REVIEW", "evidence_refs": [artifact["artifact_id"]],
             "repeat_count": 1, "last_probe": "review-probe-001",
@@ -532,7 +532,7 @@ class RefineCommandTests(unittest.TestCase):
         store.record_finding(
             str(started["run_id"]), 2, lease["token"],
             {
-                "schema_version": "4.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
+                "schema_version": "5.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
                 "fingerprint": "a" * 64, "origin_severity": "P1", "effective_gate": "blocking",
                 "status": "open", "invariant_id": "I-REVIEW", "evidence_refs": [artifact["artifact_id"]],
                 "repeat_count": 0, "last_probe": "review-probe-001",
@@ -560,7 +560,7 @@ class RefineCommandTests(unittest.TestCase):
         store.record_finding(
             str(started["run_id"]), 2, lease["token"],
             {
-                "schema_version": "4.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
+                "schema_version": "5.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
                 "fingerprint": "a" * 64, "origin_severity": "P1", "effective_gate": "blocking",
                 "status": "open", "invariant_id": "I-REVIEW", "evidence_refs": [artifact["artifact_id"]],
                 "repeat_count": 0, "last_probe": "review-probe-001",
@@ -594,8 +594,8 @@ class RefineCommandTests(unittest.TestCase):
         moved.mkdir()
         default_identity, _ = project_identity(self.target, None)
         moved_default_identity, _ = project_identity(moved, None)
-        explicit_identity, mode = project_identity(self.target, "example-project-v4")
-        moved_explicit_identity, moved_mode = project_identity(moved, "example-project-v4")
+        explicit_identity, mode = project_identity(self.target, "example-project-v5")
+        moved_explicit_identity, moved_mode = project_identity(moved, "example-project-v5")
         self.assertNotEqual(project_key(default_identity), project_key(moved_default_identity))
         self.assertEqual(project_key(explicit_identity), project_key(moved_explicit_identity))
         self.assertEqual((mode, moved_mode), ("explicit-id", "explicit-id"))

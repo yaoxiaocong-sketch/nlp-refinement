@@ -175,7 +175,7 @@ def _validate_assessment(value: Any, proposer_id: str) -> None:
 def validate_patch_proposal(result: dict[str, Any]) -> None:
     if set(result) != REQUIRED_RESULT:
         raise PatchProposalInputError("patch proposal has unexpected or missing fields")
-    if result["schema_version"] != "4.0" or result["phase_name"] != "patch-proposal":
+    if result["schema_version"] != "5.0" or result["phase_name"] != "patch-proposal":
         raise PatchProposalInputError("patch proposal has an unsupported schema or phase")
     for field in ("proposer_id", "summary", "base_snapshot_hash"):
         if not isinstance(result[field], str) or not result[field].strip():

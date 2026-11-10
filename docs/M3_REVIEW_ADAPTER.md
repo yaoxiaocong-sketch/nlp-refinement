@@ -3,7 +3,7 @@
 ## Boundary
 
 M3 does not call a model. An external human or model may use
-`nlp_refinement/resources/prompts/review-phase.v4.md`, then submit a pre-redacted JSON result through:
+`nlp_refinement/resources/prompts/review-phase.v5.md`, then submit a pre-redacted JSON result through:
 
 ```sh
 nlp-refinement review --run-id <run-id> \
@@ -11,7 +11,7 @@ nlp-refinement review --run-id <run-id> \
   --redaction-status caller-attested-redacted
 ```
 
-The adapter validates the strict v4 result schema before writing. Every finding
+The adapter validates the strict v5 result schema before writing. Every finding
 must declare `subject_kind`, `evidence_plane`, and `category`. It records the
 submitted JSON as a review artifact, creates structured findings, and
 transitions `READY -> REVIEWING -> TRIAGING`. It does not call tools found in
@@ -20,7 +20,7 @@ the review result or in the target artifacts.
 `nl_artifact` identifies the JSON, Markdown, prompt, manifest, or other NL
 artifact being reviewed. `nl_host_boundary` identifies an observed claim about
 how a host loads or interprets that artifact; it is not a finding about host
-or support-code implementation. The latter is outside the v4 review scope.
+or support-code implementation. The latter is outside the v5 review scope.
 Static format, schema, layout, and reference categories require `static`
 evidence. Host-boundary categories require `runtime` or `hybrid` evidence.
 

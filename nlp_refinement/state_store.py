@@ -49,8 +49,6 @@ class SensitiveArtifactError(StateStoreError):
 DAY_SECONDS = 24 * 60 * 60
 STALE_AFTER_DAYS = 14
 HOT_ARTIFACT_DAYS = 30
-ARCHIVE_SUMMARY_DAYS = 180
-PURGE_AFTER_DAYS = 181
 
 TERMINAL_OUTCOMES = {
     "PASS",
@@ -113,7 +111,7 @@ RUN_OUTCOMES = {"IN_PROGRESS"} | TERMINAL_OUTCOMES
 
 
 def validate_finding_classification(subject_kind: str, evidence_plane: str, category: str) -> None:
-    """Validate the v4 NL-review taxonomy without accepting support-code findings."""
+    """Validate the v5 NL-review taxonomy without accepting support-code findings."""
     if subject_kind not in FINDING_SUBJECT_KINDS:
         raise ValueError("finding subject_kind is invalid")
     if evidence_plane not in FINDING_EVIDENCE_PLANES:
@@ -217,13 +215,17 @@ class StateStore:
                     "SELECT name FROM sqlite_master WHERE type = 'table'"
                 )
             }
+            if "archived_runs" in tables:
+                raise StateStoreError(
+                    "legacy ledger data uses the retired archive table; export or remove it explicitly"
+                )
             if "runs" in tables:
                 for row in connection.execute("SELECT run_id, run_json FROM runs"):
                     try:
                         version = json.loads(row["run_json"]).get("schema_version")
                     except json.JSONDecodeError as error:
                         raise StateStoreError("stored run JSON is invalid") from error
-                    if version != "4.0":
+                    if version != "5.0":
                         raise StateStoreError(
                             f"legacy ledger data for {row['run_id']} is unsupported; export or remove it explicitly"
                         )
@@ -282,12 +284,6 @@ class StateStore:
                     event_type TEXT NOT NULL,
                     payload_json TEXT NOT NULL,
                     created_at INTEGER NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS archived_runs (
-                    run_id TEXT PRIMARY KEY,
-                    archived_at INTEGER NOT NULL,
-                    purge_at INTEGER NOT NULL,
-                    archive_json TEXT NOT NULL
                 );
                 """
             )
@@ -749,13 +745,13 @@ class StateStore:
         """Return an immutable, content-free plan; it never changes the ledger."""
         with self._connection() as connection:
             actions = self._retention_actions(connection, now)
-        plan = {"policy_version": "4.0", "generated_at": now, "actions": actions}
+        plan = {"policy_version": "5.0", "generated_at": now, "actions": actions}
         return {**plan, "plan_hash": self._retention_plan_hash(actions)}
 
     def empty_retention_preview(self, now: int) -> dict[str, Any]:
         """Build the read-only result for a state root that has no ledger yet."""
         return {
-            "policy_version": "4.0",
+            "policy_version": "5.0",
             "generated_at": now,
             "actions": [],
             "plan_hash": self._retention_plan_hash([]),
@@ -778,29 +774,12 @@ class StateStore:
                     run["outcome"] = "STALE"
                     updated = self._write_run(connection, run, now)
                     self._record_event(connection, run_id, updated["revision"], "retention-stale", {}, now)
-                elif kind == "archive":
-                    self._archive_run(connection, run_id, now)
-                elif kind == "purge-archive":
-                    connection.execute("DELETE FROM archived_runs WHERE run_id = ?", (run_id,))
+                elif kind == "purge-run":
+                    connection.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
                 else:  # defensive: `_retention_actions` is the sole producer.
                     raise StateStoreError(f"unsupported retention action: {kind}")
                 completed.append(action)
         return {"plan_hash": plan_hash, "applied_at": now, "actions": completed}
-
-    def list_archived_runs(self) -> list[dict[str, Any]]:
-        with self._connection() as connection:
-            rows = connection.execute(
-                "SELECT run_id, archived_at, purge_at, archive_json FROM archived_runs ORDER BY archived_at, run_id"
-            ).fetchall()
-        return [
-            {
-                "run_id": row["run_id"],
-                "archived_at": row["archived_at"],
-                "purge_at": row["purge_at"],
-                "archive": json.loads(row["archive_json"]),
-            }
-            for row in rows
-        ]
 
     def get_finding_by_fingerprint(self, run_id: str, fingerprint: str) -> dict[str, Any] | None:
         with self._connection() as connection:
@@ -824,61 +803,11 @@ class StateStore:
             if row["state"] not in FINAL_STATES and age >= STALE_AFTER_DAYS * DAY_SECONDS:
                 actions.append({"action": "mark-stale", "run_id": run_id})
             elif row["state"] in FINAL_STATES and age >= HOT_ARTIFACT_DAYS * DAY_SECONDS:
-                actions.append({"action": "archive", "run_id": run_id})
-        for row in connection.execute("SELECT run_id, purge_at FROM archived_runs ORDER BY run_id"):
-            if now >= int(row["purge_at"]):
-                actions.append({"action": "purge-archive", "run_id": str(row["run_id"])})
+                actions.append({"action": "purge-run", "run_id": run_id})
         return actions
 
     def _retention_plan_hash(self, actions: list[dict[str, Any]]) -> str:
-        return self._digest(self._dump({"policy_version": "4.0", "actions": actions}))
-
-    def _archive_run(self, connection: sqlite3.Connection, run_id: str, now: int) -> None:
-        run_row = connection.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
-        if run_row is None:
-            raise KeyError(f"run not found: {run_id}")
-        run = self._run_from_row(run_row)
-        if run["state"] not in FINAL_STATES:
-            raise InvalidTransition("only final runs may be archived")
-        artifact_rows = connection.execute(
-            "SELECT artifact_id, kind, actor, content_hash, redaction_status, revision, created_at FROM artifacts WHERE run_id = ? ORDER BY sequence",
-            (run_id,),
-        ).fetchall()
-        finding_rows = connection.execute("SELECT origin_severity, finding_json FROM findings WHERE run_id = ?", (run_id,)).fetchall()
-        event_rows = connection.execute("SELECT event_type FROM events WHERE run_id = ?", (run_id,)).fetchall()
-        severity_counts: dict[str, int] = {}
-        status_counts: dict[str, int] = {}
-        for finding_row in finding_rows:
-            finding = json.loads(finding_row["finding_json"])
-            severity = str(finding_row["origin_severity"])
-            status = str(finding.get("status"))
-            severity_counts[severity] = severity_counts.get(severity, 0) + 1
-            status_counts[status] = status_counts.get(status, 0) + 1
-        event_type_counts: dict[str, int] = {}
-        for event_row in event_rows:
-            event_type = str(event_row["event_type"])
-            event_type_counts[event_type] = event_type_counts.get(event_type, 0) + 1
-        archive = {
-            "archive_version": "1.0",
-            "run": {
-                key: run[key]
-                for key in (
-                    "schema_version", "run_id", "project_key", "target_snapshot_hash",
-                    "current_snapshot_hash", "authorization_mode", "state", "outcome",
-                    "revision", "retention_policy_version",
-                )
-            },
-            "timestamps": {"created_at": run_row["created_at"], "terminal_or_stale_at": run_row["updated_at"], "archived_at": now},
-            "artifacts": [dict(row) for row in artifact_rows],
-            "finding_counts": {"by_severity": severity_counts, "by_status": status_counts},
-            "event_counts": {"total": len(event_rows), "by_type": event_type_counts},
-        }
-        purge_at = int(run_row["updated_at"]) + PURGE_AFTER_DAYS * DAY_SECONDS
-        connection.execute(
-            "INSERT INTO archived_runs (run_id, archived_at, purge_at, archive_json) VALUES (?, ?, ?, ?)",
-            (run_id, now, purge_at, self._dump(archive)),
-        )
-        connection.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+        return self._digest(self._dump({"policy_version": "5.0", "actions": actions}))
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -974,7 +903,7 @@ class StateStore:
             raise ValueError("finding run_id must match target run")
         if finding["origin_severity"] not in FINDING_SEVERITIES:
             raise ValueError("finding origin_severity is invalid")
-        if finding["schema_version"] != "4.0":
+        if finding["schema_version"] != "5.0":
             raise ValueError("finding schema_version is invalid")
         if finding["effective_gate"] not in FINDING_GATES:
             raise ValueError("finding effective_gate is invalid")
@@ -1019,7 +948,7 @@ class StateStore:
         missing = required - set(run)
         if missing:
             raise ValueError(f"run is missing required fields: {sorted(missing)}")
-        if run["schema_version"] != "4.0" or run["retention_policy_version"] != "4.0":
+        if run["schema_version"] != "5.0" or run["retention_policy_version"] != "5.0":
             raise ValueError("run schema or retention policy version is invalid")
         if re.fullmatch(r"run_[a-z0-9]{12,64}", str(run["run_id"])) is None:
             raise ValueError("run_id is invalid")

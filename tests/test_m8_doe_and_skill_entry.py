@@ -115,11 +115,11 @@ class M8DoeAndSkillEntryTests(unittest.TestCase):
         ]:
             self.assertNotIn("$refine", path.read_text(encoding="utf-8"), path)
 
-    def test_user_facing_protocol_descriptions_are_v4(self) -> None:
+    def test_user_facing_protocol_descriptions_are_v5(self) -> None:
         manifest = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         taxonomy = (ROOT / "docs" / "M6_FINDING_TAXONOMY.md").read_text(encoding="utf-8")
 
-        self.assertIn("validates v4 NL-artifact reviews", manifest["interface"]["longDescription"])
+        self.assertIn("validates v5 NL-artifact reviews", manifest["interface"]["longDescription"])
         self.assertIn("V4 reviews natural-language-programming artifacts", taxonomy)
 
     def test_live_host_review_documents_its_execution_boundary(self) -> None:
@@ -384,7 +384,7 @@ class M8DoeAndSkillEntryTests(unittest.TestCase):
                 "host_attempt": {
                     "role": "reviewer", "thread_id": "thread-safe", "turn_id": "turn-safe", "turn_status": "unobserved-timeout",
                     "error_code": "client_timeout", "event_count": 3, "event_methods": ["turn/started"],
-                    "host_version": "codex-cli 0.164.0", "model": "fake-model", "timeout_seconds": 120.0,
+                    "host_version": "codex-cli 0.165.0", "model": "fake-model", "timeout_seconds": 120.0,
                     "effective_sandbox": "read-only",
                     "timing": {
                         "failure_stage": "awaiting_first_agent_message", "deadline_ms": 120000,
@@ -406,7 +406,7 @@ class M8DoeAndSkillEntryTests(unittest.TestCase):
     def test_simulated_proposal_validation_failure_reaches_same_attempt_quality_receipt(self) -> None:
         """Exercise Coordinator -> capture -> redaction -> receipt without a model call."""
         module = runpy.run_path(str(ROOT / "scripts" / "run_m8_host_doe.py"))
-        review = (ROOT / "fixtures" / "v4" / "review-result.json").read_text(encoding="utf-8")
+        review = (ROOT / "fixtures" / "v5" / "review-result.json").read_text(encoding="utf-8")
         secret = "proposal-secret-must-not-persist"
 
         class FakeClient:

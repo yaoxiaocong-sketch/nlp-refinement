@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-_EXPECTED_CONTRACT_IDS = {"review-result/v4", "patch-proposal-result/v4"}
+_EXPECTED_CONTRACT_IDS = {"review-result/v5", "patch-proposal-result/v5"}
 _VALID_OWNERS = {"review_adapter", "patch_proposal_adapter"}
 
 
@@ -20,14 +20,14 @@ def _normalized_prompt_text(value: str) -> str:
 
 
 def load_format_contract_registry(root: Path) -> dict[str, Any]:
-    value = _load_json(root / "contracts/v4/phase-output-contracts.json")
+    value = _load_json(root / "contracts/v5/phase-output-contracts.json")
     if not isinstance(value, dict):
         raise ValueError("format contract registry must be a JSON object")
     return value
 
 
 def load_contract_cases(root: Path) -> dict[str, Any]:
-    value = _load_json(root / "fixtures/v4/format-contract-cases.json")
+    value = _load_json(root / "fixtures/v5/format-contract-cases.json")
     if not isinstance(value, dict):
         raise ValueError("format contract cases must be a JSON object")
     return value
@@ -103,9 +103,9 @@ def validate_format_contract_registry(root: Path) -> list[str]:
                 declared_case_ids.update(negative)
     if ids != _EXPECTED_CONTRACT_IDS:
         errors.append("format contract registry must declare exactly the supported phase outputs")
-    case_rows = cases.get("cases") if cases.get("schema_version") == "4.0" else None
+    case_rows = cases.get("cases") if cases.get("schema_version") == "5.0" else None
     if not isinstance(case_rows, list):
-        errors.append("format contract cases must declare schema version 4.0 and cases")
+        errors.append("format contract cases must declare schema version 5.0 and cases")
         return errors
     case_ids = {case.get("case_id") for case in case_rows if isinstance(case, dict)}
     if len(case_ids) != len(case_rows) or not all(isinstance(case_id, str) for case_id in case_ids):
@@ -130,7 +130,7 @@ def validate_format_contract_registry(root: Path) -> list[str]:
 
 
 def validate_state_schema_parity(root: Path) -> list[str]:
-    """Ensure persisted-v4 enum surfaces match their StateStore authority."""
+    """Ensure persisted-v5 enum surfaces match their StateStore authority."""
     from nlp_refinement import state_store
 
     checks = (
@@ -150,7 +150,7 @@ def validate_state_schema_parity(root: Path) -> list[str]:
     )
     errors: list[str] = []
     for schema_name, property_name, runtime_values in checks:
-        schema = _load_json(root / "nlp_refinement/resources/schemas/v4" / f"{schema_name}.schema.json")
+        schema = _load_json(root / "nlp_refinement/resources/schemas/v5" / f"{schema_name}.schema.json")
         values = schema.get("properties", {}).get(property_name, {}).get("enum")
         if not isinstance(values, list) or set(values) != set(runtime_values):
             errors.append(f"{schema_name}.{property_name} enum differs from StateStore")

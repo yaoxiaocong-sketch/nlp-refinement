@@ -1,6 +1,6 @@
 {
   "run": {
-    "schema_version": "4.0",
+    "schema_version": "5.0",
     "run_id": "run_3333333333333333",
     "project_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target_snapshot_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -12,11 +12,11 @@
     "repair_cycle_count": 2,
     "max_repair_cycles": 3,
     "open_high_risk_assumptions": 0,
-    "retention_policy_version": "4.0"
+    "retention_policy_version": "5.0"
   },
   "findings": [
     {
-      "schema_version": "4.0",
+      "schema_version": "5.0",
       "finding_id": "F-004",
       "run_id": "run_3333333333333333",
       "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
@@ -38,7 +38,7 @@
   ],
   "artifacts": [
     {
-      "schema_version": "4.0",
+      "schema_version": "5.0",
       "artifact_id": "r00000006-review",
       "run_id": "run_3333333333333333",
       "kind": "review",
@@ -48,7 +48,7 @@
       "redaction_status": "caller-attested-redacted"
     },
     {
-      "schema_version": "4.0",
+      "schema_version": "5.0",
       "artifact_id": "r00000007-verification",
       "run_id": "run_3333333333333333",
       "kind": "verification",
@@ -60,7 +60,7 @@
   ],
   "acceptance_traces": [
     {
-      "schema_version": "4.0",
+      "schema_version": "5.0",
       "trace_id": "AT-004",
       "run_id": "run_3333333333333333",
       "user_outcome": "Repeated work stops without new evidence.",
@@ -71,12 +71,11 @@
     }
   ],
   "retention_policy": {
-    "schema_version": "4.0",
-    "policy_version": "4.0",
+    "schema_version": "5.0",
+    "policy_version": "5.0",
     "stale_after_days": 14,
     "hot_artifact_days": 30,
-    "archive_summary_days": 180,
-    "purge_after_days": 181,
+    "purge_after_days": 30,
     "warning_storage_mib": 500,
     "hard_storage_mib": 1024
   }

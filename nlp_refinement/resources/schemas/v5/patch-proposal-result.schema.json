@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "NLP-refinement Human-only Patch Proposal Result v4",
+  "title": "NLP-refinement Human-only Patch Proposal Result v5",
   "type": "object",
   "required": ["schema_version", "phase_name", "proposer_id", "summary", "base_snapshot_hash", "no_target_write_attestation", "proposals"],
   "properties": {
-    "schema_version": {"const": "4.0"},
+    "schema_version": {"const": "5.0"},
     "phase_name": {"const": "patch-proposal"},
     "proposer_id": {"type": "string", "minLength": 1},
     "summary": {"type": "string", "minLength": 1},

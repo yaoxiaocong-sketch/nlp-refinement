@@ -21,9 +21,9 @@ Every required string must contain non-whitespace text. Each emitted fingerprint
 must be unique within this review result.
 
 Classify every concern using exactly one `subject_kind`, `evidence_plane`, and
-`category` permitted by the supplied v4 review-result schema:
+`category` permitted by the supplied v5 review-result schema:
 Use only subject-kind, evidence-plane, and category combinations permitted by
-the v4 review contract.
+the v5 review contract.
 
 - `nl_artifact` concerns use static categories. Format, schema, layout, and
   reference categories require `static` evidence; semantic, safety, and
@@ -47,7 +47,7 @@ review uses `evidence_plane: static` and `claim_status: direct-static`; and
 `E3-corroborated` requires both `evidence_plane: hybrid` and
 `claim_status: corroborated`. The target text alone is not runtime evidence.
 
-Return only a JSON object conforming to the supplied v4 review-result schema.
+Return only a JSON object conforming to the supplied v5 review-result schema.
 Use no Markdown fences or additional fields. An empty `findings` array means
 only that this review reported none; it is not a PASS outcome.
 

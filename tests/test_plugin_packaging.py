@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import tomllib
 import unittest
 
 
@@ -12,9 +13,12 @@ class PluginPackagingTests(unittest.TestCase):
     def test_portable_and_codex_compatibility_manifests_share_one_skill_package(self) -> None:
         portable = json.loads((ROOT / "plugin.json").read_text(encoding="utf-8"))
         compatibility = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        with (ROOT / "pyproject.toml").open("rb") as handle:
+            distribution = tomllib.load(handle)
 
         self.assertEqual(portable["name"], "nlp-refinement-cli")
         self.assertEqual(portable["version"], compatibility["version"])
+        self.assertEqual(portable["version"], distribution["project"]["version"])
         self.assertEqual(portable["description"], compatibility["description"])
         self.assertEqual(portable["$schema"], "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json")
         self.assertTrue(portable["extensions"]["com.openai"]["requires_local_executor"])
@@ -25,6 +29,13 @@ class PluginPackagingTests(unittest.TestCase):
         )
         self.assertEqual(compatibility["skills"], "./skills/")
         self.assertTrue((ROOT / "skills" / "nlp-refine" / "SKILL.md").is_file())
+        self.assertEqual(
+            portable["extensions"]["com.openai"]["onboardingSkill"],
+            "./skills/nlp-refine-setup/SKILL.md",
+        )
+        self.assertEqual(compatibility["onboardingSkill"], "./skills/nlp-refine-setup/SKILL.md")
+        self.assertTrue((ROOT / "skills" / "nlp-refine-setup" / "SKILL.md").is_file())
+        self.assertIn("nlp-refine-setup", (ROOT / "skills" / "nlp-refine" / "SKILL.md").read_text(encoding="utf-8"))
         self.assertFalse((ROOT / ".agents" / "skills" / "nlp-refine" / "SKILL.md").exists())
 
     def test_authoritative_documents_describe_the_accepted_host_boundary(self) -> None:

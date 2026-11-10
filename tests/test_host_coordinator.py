@@ -55,7 +55,7 @@ class M8ReviewCoordinatorTests(unittest.TestCase):
             artifact.write_text("password: hunter2\n", encoding="utf-8")
             snapshot = snapshot_for(artifact)
             run_id = "run_1234567890ab"
-            store.create_run({"schema_version": "4.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "4.0"}, {"redacted_brief": "x"}, now=1)
+            store.create_run({"schema_version": "5.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "5.0"}, {"redacted_brief": "x"}, now=1)
             lease = store.acquire_lease(run_id, "test", now=1)
             store.transition(run_id, 0, lease["token"], "READY", "IN_PROGRESS", snapshot, now=1)
             store.release_lease(run_id, lease["token"], now=1)
@@ -84,12 +84,12 @@ class M8ReviewCoordinatorTests(unittest.TestCase):
             store = StateStore(state_dir / "state.db")
             store.initialize()
             run_id = "run_1234567890ab"
-            store.create_run({"schema_version": "4.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "4.0"}, {"redacted_brief": "x"}, now=1)
+            store.create_run({"schema_version": "5.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "5.0"}, {"redacted_brief": "x"}, now=1)
             lease = store.acquire_lease(run_id, "test", now=1)
             store.transition(run_id, 0, lease["token"], "READY", "IN_PROGRESS", snapshot, now=1)
             store.release_lease(run_id, lease["token"], now=1)
-            review = {"schema_version": "4.0", "phase_name": "review", "reviewer_id": "r", "summary": "x", "findings": [{"fingerprint": "a" * 64, "origin_severity": "P1", "effective_gate": "blocking", "invariant_id": "I", "last_probe": "p", "subject_kind": "nl_artifact", "evidence_plane": "static", "category": "semantic_workflow", "evidence_confidence": "E2-direct", "impact_scope": "single-artifact", "claim_status": "direct-static", "statement": "x", "evidence": "x", "recommendation": "x"}]}
-            proposal = {"schema_version": "4.0", "phase_name": "patch-proposal", "proposer_id": "p", "summary": "x", "base_snapshot_hash": snapshot, "no_target_write_attestation": True, "proposals": [{"finding_id": "F-001", "target_reference": "skill.md", "unified_diff": "--- a/skill.md\n+++ b/skill.md\n@@ -1 +1 @@\n-old\n+new\n", "rationale": "x", "target_invariants": ["I"], "causal_claim": "x", "causal_evidence_refs": ["r00000003-review"], "authorization_basis": "review-only-human-application", "verification_plan": "x", "regression_plan": "x", "known_risks": "x", "alternatives_considered": "x", "claims_not_yet_verified": "x", "assessment": {"assessor_id": "a", "evidence_refs": ["r00000003-review"], "scores": {"coverage": 20, "causal": 20, "scope": 15, "verification": 15, "regression": 10, "evidence": 10, "alternatives": 5, "clarity": 5}, "total_score": 100, "recommendation": "recommend", "runtime_effectiveness": "unverified"}}]}
+            review = {"schema_version": "5.0", "phase_name": "review", "reviewer_id": "r", "summary": "x", "findings": [{"fingerprint": "a" * 64, "origin_severity": "P1", "effective_gate": "blocking", "invariant_id": "I", "last_probe": "p", "subject_kind": "nl_artifact", "evidence_plane": "static", "category": "semantic_workflow", "evidence_confidence": "E2-direct", "impact_scope": "single-artifact", "claim_status": "direct-static", "statement": "x", "evidence": "x", "recommendation": "x"}]}
+            proposal = {"schema_version": "5.0", "phase_name": "patch-proposal", "proposer_id": "p", "summary": "x", "base_snapshot_hash": snapshot, "no_target_write_attestation": True, "proposals": [{"finding_id": "F-001", "target_reference": "skill.md", "unified_diff": "--- a/skill.md\n+++ b/skill.md\n@@ -1 +1 @@\n-old\n+new\n", "rationale": "x", "target_invariants": ["I"], "causal_claim": "x", "causal_evidence_refs": ["r00000003-review"], "authorization_basis": "review-only-human-application", "verification_plan": "x", "regression_plan": "x", "known_risks": "x", "alternatives_considered": "x", "claims_not_yet_verified": "x", "assessment": {"assessor_id": "a", "evidence_refs": ["r00000003-review"], "scores": {"coverage": 20, "causal": 20, "scope": 15, "verification": 15, "regression": 10, "evidence": 10, "alternatives": 5, "clarity": 5}, "total_score": 100, "recommendation": "recommend", "runtime_effectiveness": "unverified"}}]}
             fake = FakeHost([
                 HostResult(
                     "reviewer", "thr-review", "turn-review", json.dumps(review),
@@ -160,7 +160,7 @@ class M8ReviewCoordinatorTests(unittest.TestCase):
             store = StateStore(state_dir / "state.db")
             store.initialize()
             run_id = "run_1234567890ab"
-            store.create_run({"schema_version": "4.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "4.0"}, {"redacted_brief": "x"}, now=1)
+            store.create_run({"schema_version": "5.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "5.0"}, {"redacted_brief": "x"}, now=1)
             lease = store.acquire_lease(run_id, "test", now=1)
             store.transition(run_id, 0, lease["token"], "READY", "IN_PROGRESS", snapshot, now=1)
             store.release_lease(run_id, lease["token"], now=1)
@@ -189,7 +189,7 @@ class M8ReviewCoordinatorTests(unittest.TestCase):
             artifact.write_text("# original\n", encoding="utf-8")
             snapshot = snapshot_for(artifact)
             run_id = "run_1234567890ab"
-            store.create_run({"schema_version": "4.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "4.0"}, {"redacted_brief": "x"}, now=1)
+            store.create_run({"schema_version": "5.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "5.0"}, {"redacted_brief": "x"}, now=1)
             lease = store.acquire_lease(run_id, "test", now=1)
             store.transition(run_id, 0, lease["token"], "READY", "IN_PROGRESS", snapshot, now=1)
             store.release_lease(run_id, lease["token"], now=1)
@@ -213,7 +213,7 @@ class M8ReviewCoordinatorTests(unittest.TestCase):
             artifact.write_text("# fixture\n", encoding="utf-8")
             snapshot = snapshot_for(artifact)
             run_id = "run_1234567890ab"
-            store.create_run({"schema_version": "4.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "4.0"}, {"redacted_brief": "x"}, now=1)
+            store.create_run({"schema_version": "5.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "5.0"}, {"redacted_brief": "x"}, now=1)
             setup_lease = store.acquire_lease(run_id, "setup", now=1)
             store.transition(run_id, 0, setup_lease["token"], "READY", "IN_PROGRESS", snapshot, now=1)
             store.release_lease(run_id, setup_lease["token"], now=1)
@@ -238,7 +238,7 @@ class M8ReviewCoordinatorTests(unittest.TestCase):
             artifact = root / "skill.md"
             artifact.write_text("# fixture\n", encoding="utf-8")
             run_id = "run_1234567890ab"
-            store.create_run({"schema_version": "4.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": SNAPSHOT, "current_snapshot_hash": SNAPSHOT, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "4.0"}, {"redacted_brief": "x"}, now=1)
+            store.create_run({"schema_version": "5.0", "run_id": run_id, "project_key": "d" * 64, "target_snapshot_hash": SNAPSHOT, "current_snapshot_hash": SNAPSHOT, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "5.0"}, {"redacted_brief": "x"}, now=1)
             lease = store.acquire_lease(run_id, "test", now=1)
             store.transition(run_id, 0, lease["token"], "READY", "IN_PROGRESS", SNAPSHOT, now=1)
             store.release_lease(run_id, lease["token"], now=1)

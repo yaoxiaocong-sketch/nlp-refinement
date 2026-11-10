@@ -66,12 +66,12 @@ def _ready_run(store: StateStore, snapshot: str) -> str:
     run_id = "run_m8diagnostic0001"
     store.create_run(
         {
-            "schema_version": "4.0", "run_id": run_id,
+            "schema_version": "5.0", "run_id": run_id,
             "project_key": hashlib.sha256(b"nlp-refinement/m8-diagnostic-doe").hexdigest(),
             "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot,
             "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS",
             "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3,
-            "open_high_risk_assumptions": 0, "retention_policy_version": "4.0",
+            "open_high_risk_assumptions": 0, "retention_policy_version": "5.0",
         },
         {"redacted_brief": "Run an isolated M8 host diagnostic DOE."},
         now=1,

@@ -1,5 +1,5 @@
 {
-  "schema_version": "4.0",
+  "schema_version": "5.0",
   "phase_name": "review",
   "reviewer_id": "fixture-reviewer",
   "summary": "A controlled review result for the M3 adapter.",

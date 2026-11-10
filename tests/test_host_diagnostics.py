@@ -234,7 +234,7 @@ class HostDiagnosticTests(unittest.TestCase):
         )
 
     def test_proposal_validation_capture_reports_only_local_validator_error(self) -> None:
-        result = json.loads((ROOT / "fixtures" / "v4" / "patch-proposal-result.json").read_text(encoding="utf-8"))
+        result = json.loads((ROOT / "fixtures" / "v5" / "patch-proposal-result.json").read_text(encoding="utf-8"))
         result["proposals"][0]["assessment"].pop("scores")
         result["summary"] = "must never appear in the diagnostic"
         capture = ProposalValidationCapture()
@@ -264,7 +264,7 @@ class HostDiagnosticTests(unittest.TestCase):
 
     def test_proposal_validation_capture_classifies_ingestion_error_without_finding_value(self) -> None:
         capture = ProposalValidationCapture()
-        valid_result = json.loads((ROOT / "fixtures" / "v4" / "patch-proposal-result.json").read_text(encoding="utf-8"))
+        valid_result = json.loads((ROOT / "fixtures" / "v5" / "patch-proposal-result.json").read_text(encoding="utf-8"))
         capture.record_proposal_result(json.dumps(valid_result))
         error = RuntimeError("coordinator failed")
         error.__cause__ = PatchProposalInputError(
@@ -283,7 +283,7 @@ class HostDiagnosticTests(unittest.TestCase):
         self.assertNotIn("F-secret-model-value", json.dumps(capture.snapshot()))
 
     def test_reviewer_quality_capture_summarizes_only_fixed_classification_labels(self) -> None:
-        result = json.loads((ROOT / "fixtures" / "v4" / "review-result.json").read_text(encoding="utf-8"))
+        result = json.loads((ROOT / "fixtures" / "v5" / "review-result.json").read_text(encoding="utf-8"))
         result["findings"].append(
             {
                 "fingerprint": "b" * 64,

@@ -131,7 +131,7 @@ def _ready_run(store: StateStore, snapshot: str) -> str:
     run_id = "run_m8hostdoe0001"
     store.create_run(
         {
-            "schema_version": "4.0",
+            "schema_version": "5.0",
             "run_id": run_id,
             "project_key": hashlib.sha256(b"nlp-refinement/m8-doe").hexdigest(),
             "target_snapshot_hash": snapshot,
@@ -143,7 +143,7 @@ def _ready_run(store: StateStore, snapshot: str) -> str:
             "repair_cycle_count": 0,
             "max_repair_cycles": 3,
             "open_high_risk_assumptions": 0,
-            "retention_policy_version": "4.0",
+            "retention_policy_version": "5.0",
         },
         {"redacted_brief": "Run the isolated M8 host-dispatch DOE."},
         now=1,

@@ -16,8 +16,8 @@ if str(ROOT) not in sys.path:
 
 from nlp_refinement.format_contracts import validate_format_contract_registry, validate_state_schema_parity
 
-SCHEMA_DIR = ROOT / "nlp_refinement" / "resources" / "schemas" / "v4"
-FIXTURE_DIR = ROOT / "fixtures" / "v4"
+SCHEMA_DIR = ROOT / "nlp_refinement" / "resources" / "schemas" / "v5"
+FIXTURE_DIR = ROOT / "fixtures" / "v5"
 SUPPORTED_KEYWORDS = {
     "$schema",
     "title",

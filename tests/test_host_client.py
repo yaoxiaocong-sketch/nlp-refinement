@@ -240,4 +240,4 @@ class AppServerClientTests(unittest.TestCase):
 
     def test_host_version_rejects_a_non_version_error_line(self) -> None:
         self.assertEqual(_host_version_label("file:///opt/codex/bin/codex.js:107"), "unreported")
-        self.assertEqual(_host_version_label("codex-cli 0.164.0"), "codex-cli 0.164.0")
+        self.assertEqual(_host_version_label("codex-cli 0.165.0"), "codex-cli 0.165.0")

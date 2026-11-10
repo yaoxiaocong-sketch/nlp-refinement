@@ -70,6 +70,16 @@ class HostExecutionBoundaryTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertFalse((state_root / "state.db").exists())
 
+    def test_external_host_help_states_that_host_history_is_separate(self) -> None:
+        from nlp_refinement.host_refine import build_parser as build_host_parser
+
+        parser = build_host_parser()
+        with redirect_stdout(io.StringIO()) as rendered:
+            with self.assertRaises(SystemExit) as exited:
+                parser.parse_args(["review", "--help"])
+        self.assertEqual(exited.exception.code, 0)
+        self.assertIn("Codex host session history follows Codex configuration", rendered.getvalue())
+
     def test_normal_cli_emits_a_no_model_host_execution_request(self) -> None:
         from nlp_refinement.refine import main
 

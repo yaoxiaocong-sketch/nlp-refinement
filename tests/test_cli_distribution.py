@@ -38,11 +38,11 @@ class CliDistributionTests(unittest.TestCase):
             package = tomllib.load(handle)
 
         resource_root = ROOT / "nlp_refinement" / "resources"
-        self.assertTrue((resource_root / "schemas" / "v4" / "review-result.schema.json").is_file())
-        self.assertTrue((resource_root / "prompts" / "review-phase.v4.md").is_file())
+        self.assertTrue((resource_root / "schemas" / "v5" / "review-result.schema.json").is_file())
+        self.assertTrue((resource_root / "prompts" / "review-phase.v5.md").is_file())
         self.assertEqual(
             package["tool"]["setuptools"]["package-data"]["nlp_refinement.resources"],
-            ["schemas/v4/*.json", "prompts/*.md"],
+            ["schemas/v5/*.json", "prompts/*.md"],
         )
 
     def test_normal_command_advertises_the_external_host_executable(self) -> None:

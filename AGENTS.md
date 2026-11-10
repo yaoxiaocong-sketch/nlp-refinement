@@ -6,7 +6,7 @@ technical identifier is `nlp-refinement-cli`.
 
 ## Architecture
 
-- `nlp_refinement/resources/schemas/v4/` is the normative v4 protocol surface.
+- `nlp_refinement/resources/schemas/v5/` is the normative v5 protocol surface.
 - `nlp_refinement/state_store.py` is the local SQLite StateStore. It owns only
   run-ledger persistence; it does not read or modify a target worktree.
 - `nlp_refinement/refine.py` is the review-only command adapter. Its
@@ -17,14 +17,16 @@ technical identifier is `nlp-refinement-cli`.
   native-subagent identity, or broader host permissions.
 - `pyproject.toml` publishes `nlp-refinement`, `nlp-refinement-host`, and the
   no-model `nlp-refinement-doe-prune` command. The plugin does not install
-  Python code or infer a cache path at runtime.
+  Python code during normal use or infer a cache path at runtime. Its optional
+  onboarding bootstrap may install a separately distributed CLI only after an
+  explicit user confirmation of a hash-pinned release plan.
 - `nlp_refinement/review_adapter.py` validates externally produced M3 review
   JSON and is the sole writer of its review artifacts and findings.
 - `nlp_refinement/repair_feasibility.py` runs only disposable M4 filesystem
   probes. It is not a target-worktree writer or repair adapter.
 - `nlp_refinement/patch_proposal_adapter.py` records untrusted, human-only M5
   diff proposals as review evidence. It never resolves or accesses a target.
-- `fixtures/v4/` contains executable examples of terminal outcomes and safety
+- `fixtures/v5/` contains executable examples of terminal outcomes and safety
   cases.
 - `scripts/validate_m0_contract.py` validates the supported JSON Schema subset,
   fixture records, and M0 cross-record invariants using Python's standard
@@ -67,7 +69,9 @@ M1 StateStore tests are included in the same `unittest` command.
 - A failed repair may only reverse a system-owned patch whose hash still
   matches. A snapshot mismatch must stop as `SNAPSHOT_STALE`.
 - M8 host output is untrusted. Record a bounded host-observation receipt before
-  schema acceptance; raw model output and event payloads stay in process memory.
+  schema acceptance; raw model output and event payloads stay in this plugin's
+  process memory. Codex host session history is separately governed by Codex
+  configuration and is outside this plugin's retention control.
   Persist structured output only after phase validation. On transport or
   validation failure, move to `BLOCKED` and require an
   explicit matching-snapshot retry. Normal external host execution never auto-retries a
@@ -84,9 +88,10 @@ M1 StateStore tests are included in the same `unittest` command.
 
 ## Retention Policy
 
-- Complete, caller-attested-redacted terminal artifacts remain hot for 30 days.
-- On day 31, retain only a content-free audit archive through day 180.
-- On day 181, purge plugin-owned records and plugin-created archives.
+- Complete, caller-attested-redacted terminal artifacts remain in the
+  plugin-owned SQLite ledger for 30 days.
+- After 30 days, a confirmed retention sweep purges the entire plugin-owned
+  run and its cascading ledger records; there is no intermediate archive.
 - Mark a non-terminal run `STALE` after 14 days without activity; it follows
   the same lifecycle.
 - `retention-preview` is read-only. `retention-sweep --confirm-plan-hash` may

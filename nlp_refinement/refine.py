@@ -24,6 +24,8 @@ from nlp_refinement.sensitive_data import likely_secret_kind
 from nlp_refinement.state_store import FINAL_STATES, StateStore, StateStoreError
 
 
+# Project identity is independent of the persisted protocol version.  Keep it
+# stable while the project-key algorithm itself is unchanged.
 PROJECT_KEY_DOMAIN = "nlp-refinement/project-key/v4\\0"
 
 
@@ -147,7 +149,7 @@ def start(args: argparse.Namespace, store: StateStore) -> int:
     identity, identity_mode = project_identity(args.project_dir, args.project_id)
     run_id = f"run_{secrets.token_hex(12)}"
     run = {
-        "schema_version": "4.0",
+        "schema_version": "5.0",
         "run_id": run_id,
         "project_key": project_key(identity),
         "target_snapshot_hash": observed_snapshot,
@@ -159,7 +161,7 @@ def start(args: argparse.Namespace, store: StateStore) -> int:
         "repair_cycle_count": 0,
         "max_repair_cycles": 3,
         "open_high_risk_assumptions": 0,
-        "retention_policy_version": "4.0",
+        "retention_policy_version": "5.0",
     }
     created_at = now_epoch()
     store.create_run(

@@ -3,9 +3,13 @@
 ## Scope
 
 M1 implements local SQLite persistence for run metadata, immutable anchors,
-leases, append-only artifacts, findings, events, and content-free retention
-archives. It intentionally excludes MCP transport, filesystem repair, Codex
-command discovery, and any promise of forensic disk erasure.
+leases, append-only artifacts, findings, and events. It intentionally excludes
+MCP transport, filesystem repair, Codex command discovery, Codex host session
+history, and any promise of forensic disk erasure.
+
+The v5 retention contract is a development-stage hard cut: a ledger containing
+v4 runs is rejected without migration or rewrite. Export or remove an old
+ledger explicitly before creating a v5 ledger.
 
 ## Write invariant
 
@@ -45,9 +49,9 @@ root.
   redacted model view, but the StateStore still rejects detected likely secrets
   from caller-attested persistence. `system-metadata` is reserved for bounded
   coordinator receipts.
-- Retention requires an exact preview-plan hash. At 30 days a final run is
-  replaced by metadata-only archive data; at 181 days that archive is removed.
-  No scheduled background process runs these actions automatically.
+- Retention requires an exact preview-plan hash. After 30 days a final run and
+  all of its plugin-owned ledger records are deleted. No scheduled background
+  process runs this action automatically.
 
 ## Verification boundary
 

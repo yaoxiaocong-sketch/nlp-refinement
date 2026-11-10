@@ -8,7 +8,7 @@ SQLite ledger; M2, a review-only command adapter; and M3, structured external
 review-result ingestion for a local-first
 refinement loop over Skills, plugins, prompts, rules, agents, and their
 fixtures. M4 adds only a temporary-fixture repair feasibility DOE. M5 records
-human-only patch proposals. M6 makes the v4 NL finding taxonomy mandatory; M7
+human-only patch proposals. M6 makes the v5 NL finding taxonomy mandatory; M7
 adds finding-assessment and proposal-score contracts; M8 adds an optional
 standard-library Coordinator that asks the local Codex app-server for separate
 reviewer and proposal threads. No milestone modifies target artifacts.
@@ -17,11 +17,16 @@ reviewer and proposal threads. No milestone modifies target artifacts.
 
 The Plugin/Skill is an instruction and discovery surface. The local executable
 is a separately installed Python distribution; Plugin installation never
-installs it implicitly. Install the matching release artifact into a
-user-managed Python environment, for example:
+installs it implicitly. For a published, configured release, the first
+`$nlp-refine` setup flow may present a pinned CLI installation plan and, only
+after explicit user confirmation, download, verify, and install that exact
+wheel. This source checkout has no production release URL or hash, so its setup
+flow deliberately stops instead of inventing a download source.
+
+Manual/offline installation remains supported:
 
 ```sh
-python3 -m pip install --user /path/to/nlp_refinement_cli-0.8.2-py3-none-any.whl
+python3 -m pip install --user /path/to/nlp_refinement_cli-0.9.0-py3-none-any.whl
 ```
 
 That distribution provides two deliberately separate execution commands plus a
@@ -35,9 +40,13 @@ nlp-refinement-doe-prune --help
 
 `nlp-refinement` is the normal no-model command. Only the separately invoked
 `nlp-refinement-host` command may request the local Codex app-server after an
-explicit `--allow-model-inference` confirmation. If either command is absent,
+explicit `--allow-model-inference` confirmation. Plugin retention covers only
+its SQLite ledger; Codex host session history follows Codex configuration. If either command is absent,
 stop and install the matching CLI; do not fall back to a source checkout,
 `PYTHONPATH`, or a guessed plugin-cache path.
+
+See [first-use runtime bootstrap](docs/RUNTIME_BOOTSTRAP.md) for the plan,
+confirmation, hash-check, failure, and platform boundaries.
 
 `nlp-refinement-doe-prune` is also a no-model command. It removes only expired,
 well-formed redacted M8 DOE failure receipts from its owner-only evidence root;
@@ -66,3 +75,11 @@ The [M4 repair feasibility DOE](docs/M4_REPAIR_FEASIBILITY_DOE.md) records
 observed local primitives and explicit non-proofs. It is not a repair feature.
 See [M5 human-only patch proposals](docs/M5_HUMAN_PATCH_PROPOSALS.md) for the
 manual-application boundary.
+
+## Contributing
+
+External contributors may propose changes by forking the repository and
+opening a Pull Request; they do not receive direct repository write or PyPI
+publication access. See [CONTRIBUTING.md](CONTRIBUTING.md) for the review and
+licence boundary. The root [LICENSE](LICENSE) and [NOTICE](NOTICE) declare the
+Apache-2.0 licence and copyright-holder notice for public distribution.

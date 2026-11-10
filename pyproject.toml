@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nlp-refinement-cli"
-version = "0.8.2"
+version = "0.9.0"
 description = "Durable-local, review-only refinement for natural-language-programming artifacts."
 readme = "README.md"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
 dependencies = []
 
 [project.scripts]
@@ -15,8 +16,11 @@ nlp-refinement = "nlp_refinement.refine:main"
 nlp-refinement-host = "nlp_refinement.host_refine:main"
 nlp-refinement-doe-prune = "nlp_refinement.doe_receipt_retention:main"
 
+[tool.setuptools]
+license-files = ["LICENSE", "NOTICE"]
+
 [tool.setuptools.packages.find]
 include = ["nlp_refinement*"]
 
 [tool.setuptools.package-data]
-"nlp_refinement.resources" = ["schemas/v4/*.json", "prompts/*.md"]
+"nlp_refinement.resources" = ["schemas/v5/*.json", "prompts/*.md"]

@@ -20,8 +20,9 @@ review phase; it checks the snapshot only. A mismatch persists
 
 `retention-preview` is read-only and returns a content-free action list plus
 its `plan_hash`. `retention-sweep --confirm-plan-hash <hash>` applies only an
-unchanged plan. It may mark inactive runs stale, archive terminal runs after
-30 days, or purge archives after 181 days. It never runs automatically.
+unchanged plan. It may mark inactive runs stale or purge terminal plugin-owned
+runs after 30 days. It never runs automatically and does not manage Codex host
+session history.
 
 ## Project identity
 

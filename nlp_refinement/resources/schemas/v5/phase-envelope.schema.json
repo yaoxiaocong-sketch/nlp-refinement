@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "NLP-refinement Phase Envelope v4",
+  "title": "NLP-refinement Phase Envelope v5",
   "type": "object",
   "required": ["schema_version", "run_id", "expected_revision", "phase_name", "input_artifact_refs", "target_snapshot_hash", "allowed_reads", "allowed_writes", "required_output_schema"],
   "properties": {
-    "schema_version": {"const": "4.0"},
+    "schema_version": {"const": "5.0"},
     "run_id": {"type": "string", "pattern": "^run_[a-z0-9]{12,64}$"},
     "expected_revision": {"type": "integer", "minimum": 0},
     "phase_name": {"type": "string", "enum": ["review", "triage", "repair", "verify", "rereview", "integrity"]},

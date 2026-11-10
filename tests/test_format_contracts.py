@@ -91,7 +91,7 @@ class FormatContractTests(unittest.TestCase):
                     self.fail(f"unsupported contract owner: {case['owner']}")
 
     def test_malformed_hunk_is_rejected(self) -> None:
-        proposal = json.loads((ROOT / "fixtures/v4/patch-proposal-result.json").read_text(encoding="utf-8"))
+        proposal = json.loads((ROOT / "fixtures/v5/patch-proposal-result.json").read_text(encoding="utf-8"))
         proposal["proposals"][0]["unified_diff"] = "--- a/file.md\n+++ b/file.md\n@@ not-a-hunk\n"
         with self.assertRaises(PatchProposalInputError):
             validate_patch_proposal(proposal)

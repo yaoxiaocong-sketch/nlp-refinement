@@ -73,9 +73,11 @@ independently enforced permissions, or all host tool/network behavior.
    original value nor a replacement map is persisted. If an incomplete key or
    ambiguous secret assignment is detected, M8 does not send the artifact and
    requires a user-supplied redacted copy. This reduces accidental disclosure
-   but is not proof that an artifact contains no secret. The model-view bytes
-   are then sent to the local Codex host. Raw host responses and event payloads remain in process memory;
-   only a bounded receipt is retained before validation. The host thread's
+  but is not proof that an artifact contains no secret. The model-view bytes
+  are then sent to the local Codex host. Raw host responses and event payloads
+  remain in this plugin's process memory; Codex may retain its own session
+  history under its separate configuration. Only a bounded receipt is retained
+  in the plugin ledger before validation. The host thread's
    working directory is a disposable directory containing only that redacted
    model view; the Coordinator removes it after the two calls return. This
    narrows ordinary working-directory exposure, but does not prove host
@@ -90,7 +92,9 @@ independently enforced permissions, or all host tool/network behavior.
    ```
 
 The explicit flag is an immediate confirmation for this external command; it is
-not persisted as a model-inference authorization record. Run it only from a host-capable, non-sandboxed process that may
+not persisted as a model-inference authorization record. Codex host session
+history, if configured, is outside NLP-refinement's SQLite retention policy.
+Run it only from a host-capable, non-sandboxed process that may
    start Codex and access its local host resources. A user terminal is a common
    way to launch that process, but it does not grant privileges. A restricted
    Agent execution sandbox can block app-server startup or local control-socket
@@ -102,9 +106,9 @@ ledger writes; Coordinator renews it after reviewer ingestion and before the
 proposal turn. A competing process stops with a lease conflict before calling
 a model; it must not change the active run's state.
 
-5. The reviewer returns v4 `review-result` JSON. M8 writes its immutable host
+5. The reviewer returns v5 `review-result` JSON. M8 writes its immutable host
    receipt before validation and ingestion. The proposal thread sees only the
-   validated review context and returns v4 `patch-proposal` JSON. Its dynamic
+   validated review context and returns v5 `patch-proposal` JSON. Its dynamic
    output schema binds both proposal evidence-reference arrays to that run's
    immutable review artifact ID; StateStore verifies the same relationship
    again before accepting the proposal.

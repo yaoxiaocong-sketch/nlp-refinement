@@ -17,7 +17,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="nlp-refinement-host")
     parser.add_argument("--state-root", type=Path, default=default_state_root())
     subcommands = parser.add_subparsers(dest="command", required=True)
-    review = subcommands.add_parser("review", help="run the optional M8 host review from an external host process")
+    review = subcommands.add_parser(
+        "review",
+        help="run the optional M8 host review from an external host process",
+        description=(
+            "Run M8 through the local Codex host. NLP-refinement retention covers "
+            "only its SQLite ledger; Codex host session history follows Codex configuration."
+        ),
+    )
     review.add_argument("--run-id", required=True)
     review.add_argument("--artifact-file", type=Path, required=True)
     review.add_argument("--observed-snapshot-hash", required=True)

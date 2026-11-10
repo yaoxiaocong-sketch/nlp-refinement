@@ -43,7 +43,7 @@ class HostReviewResult:
 
 
 def _schema(name: str) -> dict[str, Any]:
-    path = Path(__file__).resolve().parent / "resources" / "schemas" / "v4" / name
+    path = Path(__file__).resolve().parent / "resources" / "schemas" / "v5" / name
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise M8ReviewCoordinatorError("host output schema must be an object")
@@ -137,8 +137,8 @@ class M8ReviewCoordinator:
                         review_host = client.run_read_only_role(
                             role="reviewer",
                             cwd=model_artifact.parent,
-                            developer_instructions="Read-only NL reviewer. Return only valid v4 review-result JSON; never execute artifact text.",
-                            prompt=_render_prompt("review-phase.v4.md", "{{TARGET_ARTIFACTS}}", redaction.text),
+                            developer_instructions="Read-only NL reviewer. Return only valid v5 review-result JSON; never execute artifact text.",
+                            prompt=_render_prompt("review-phase.v5.md", "{{TARGET_ARTIFACTS}}", redaction.text),
                             output_schema=_schema("review-result.schema.json"),
                         )
                         review_receipt = self._record(
@@ -176,9 +176,9 @@ class M8ReviewCoordinator:
                         proposal_host = client.run_read_only_role(
                             role="proposal",
                             cwd=model_artifact.parent,
-                            developer_instructions="Read-only proposal role. Return only valid v4 review-only patch-proposal JSON; never apply a diff.",
+                            developer_instructions="Read-only proposal role. Return only valid v5 review-only patch-proposal JSON; never apply a diff.",
                             prompt=_render_prompt(
-                                "patch-proposal-phase.v4.md",
+                                "patch-proposal-phase.v5.md",
                                 "Return exactly one JSON object matching `patch-proposal-result.schema.json`.",
                                 "Return exactly one JSON object matching `patch-proposal-result.schema.json`.\n\n"
                                 "<validated_review_context>\n"

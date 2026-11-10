@@ -25,7 +25,7 @@ SNAPSHOT = "b" * 64
 
 def run_payload() -> dict[str, object]:
     return {
-        "schema_version": "4.0",
+        "schema_version": "5.0",
         "run_id": RUN_ID,
         "project_key": PROJECT_KEY,
         "target_snapshot_hash": SNAPSHOT,
@@ -37,13 +37,13 @@ def run_payload() -> dict[str, object]:
         "repair_cycle_count": 0,
         "max_repair_cycles": 3,
         "open_high_risk_assumptions": 0,
-        "retention_policy_version": "4.0",
+        "retention_policy_version": "5.0",
     }
 
 
 def finding_payload() -> dict[str, object]:
     return {
-        "schema_version": "4.0",
+        "schema_version": "5.0",
         "finding_id": "F-001",
         "run_id": RUN_ID,
         "fingerprint": "c" * 64,
@@ -87,9 +87,9 @@ class StateStoreTests(unittest.TestCase):
         self.assertEqual(stored["run_id"], RUN_ID)
         self.assertEqual(stored["immutable_anchor"], {"goal": "test"})
 
-    def test_initialize_rejects_a_v3_ledger_without_rewriting_it(self) -> None:
-        legacy_path = Path(self.temp_dir.name) / "legacy-v3.db"
-        legacy_run = run_payload() | {"schema_version": "3.0", "retention_policy_version": "3.0"}
+    def test_initialize_rejects_a_v4_ledger_without_rewriting_it(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy-v4.db"
+        legacy_run = run_payload() | {"schema_version": "4.0", "retention_policy_version": "4.0"}
         with sqlite3.connect(legacy_path) as connection:
             connection.execute("CREATE TABLE runs (run_id TEXT PRIMARY KEY, run_json TEXT NOT NULL)")
             connection.execute(
@@ -103,8 +103,27 @@ class StateStoreTests(unittest.TestCase):
         with sqlite3.connect(legacy_path) as connection:
             persisted = json.loads(connection.execute("SELECT run_json FROM runs WHERE run_id = ?", (RUN_ID,)).fetchone()[0])
             tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-        self.assertEqual(persisted["schema_version"], "3.0")
+        self.assertEqual(persisted["schema_version"], "4.0")
         self.assertEqual(tables, {"runs"})
+
+    def test_initialize_rejects_a_v4_archive_only_ledger_without_rewriting_it(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy-v4-archive.db"
+        with sqlite3.connect(legacy_path) as connection:
+            connection.execute(
+                "CREATE TABLE archived_runs (run_id TEXT PRIMARY KEY, archived_at INTEGER NOT NULL, purge_at INTEGER NOT NULL, archive_json TEXT NOT NULL)"
+            )
+            connection.execute(
+                "INSERT INTO archived_runs VALUES (?, ?, ?, ?)",
+                (RUN_ID, 1, 2, "{}"),
+            )
+        legacy_path.chmod(0o600)
+
+        with self.assertRaisesRegex(RuntimeError, "legacy ledger data"):
+            StateStore(legacy_path).initialize()
+
+        with sqlite3.connect(legacy_path) as connection:
+            rows = connection.execute("SELECT run_id FROM archived_runs").fetchall()
+        self.assertEqual(rows, [(RUN_ID,)])
 
     def test_database_directory_and_file_are_owner_only(self) -> None:
         self.assertEqual(stat.S_IMODE(self.store.database_path.parent.stat().st_mode), 0o700)
@@ -208,7 +227,7 @@ class StateStoreTests(unittest.TestCase):
         artifact = self.store.append_artifact(RUN_ID, 0, lease["token"], "review", "reviewer", "body", now=1_001)
         invalid = finding_payload() | {
             "evidence_refs": [artifact["artifact_id"]],
-            "not_in_v4_schema": "must not persist",
+            "not_in_v5_schema": "must not persist",
         }
 
         with self.assertRaisesRegex(ValueError, "unexpected fields"):
@@ -250,7 +269,7 @@ class StateStoreTests(unittest.TestCase):
         self.assertEqual(self.store.list_artifacts(RUN_ID), [])
         self.assertEqual(self.store.get_run(RUN_ID)["revision"], 0)
 
-    def test_retention_archives_only_metadata_then_purges_after_policy_deadline(self) -> None:
+    def test_retention_purges_complete_terminal_run_after_30_days(self) -> None:
         lease = self.acquire()
         self.store.append_artifact(
             RUN_ID, 0, lease["token"], "review", "reviewer", "private review body",
@@ -263,21 +282,13 @@ class StateStoreTests(unittest.TestCase):
                 ("PASS", "PASS", 10, RUN_ID),
             )
 
-        archive_at = 10 + 31 * 24 * 60 * 60
-        preview = self.store.retention_preview(archive_at)
-        self.assertEqual(preview["actions"], [{"action": "archive", "run_id": RUN_ID}])
-        self.store.apply_retention(str(preview["plan_hash"]), archive_at + 5)
+        purge_at = 10 + 31 * 24 * 60 * 60
+        preview = self.store.retention_preview(purge_at)
+        self.assertEqual(preview["actions"], [{"action": "purge-run", "run_id": RUN_ID}])
+        self.store.apply_retention(str(preview["plan_hash"]), purge_at + 5)
         with self.assertRaises(KeyError):
             self.store.get_run(RUN_ID)
-        archive = self.store.list_archived_runs()[0]["archive"]
-        self.assertNotIn("body", str(archive))
-        self.assertEqual(archive["artifacts"][0]["artifact_id"], "r00000001-review")
-
-        purge_at = 10 + 181 * 24 * 60 * 60
-        purge = self.store.retention_preview(purge_at)
-        self.assertEqual(purge["actions"], [{"action": "purge-archive", "run_id": RUN_ID}])
-        self.store.apply_retention(str(purge["plan_hash"]), purge_at)
-        self.assertEqual(self.store.list_archived_runs(), [])
+        self.assertEqual(self.store.list_artifacts(RUN_ID), [])
 
     def test_retention_plan_requires_an_exact_current_confirmation(self) -> None:
         preview = self.store.retention_preview(1_000 + 14 * 24 * 60 * 60)

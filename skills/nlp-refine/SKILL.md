@@ -9,8 +9,10 @@ Use this Skill when the user requests `$nlp-refine`, asks to start or resume an 
 
 Before any command, require `nlp-refinement` on `PATH`. Before an external host
 review, also require `nlp-refinement-host` on `PATH`. If either is absent, stop
-and ask the user to install the matching CLI release; never fall back to
-`python3 -m`, `PYTHONPATH`, a source checkout, or a guessed plugin-cache path.
+the normal workflow and offer the packaged `nlp-refine-setup` onboarding flow.
+That flow may install only after it has shown a hash-pinned plan and received an
+explicit confirmation. Never fall back to `python3 -m`, `PYTHONPATH`, a source
+checkout, or a guessed plugin-cache path.
 
 ## Core boundary
 
@@ -52,7 +54,7 @@ nlp-refinement review --run-id <run-id> \
   --redaction-status caller-attested-redacted
 ```
 
-Use the packaged `nlp_refinement/resources/prompts/review-phase.v4.md` prompt and return only the v4 schema. `caller-attested-redacted` is a caller declaration, not a proof that no secret remains; a narrow likely-secret guard may still reject persistence. Every finding must classify an NL artifact or an NL/host boundary with the permitted evidence plane and category; standard-code defects are out of scope. The adapter assigns finding IDs and rejects duplicate fingerprints whose severity, gate, invariant, or classification conflicts with the existing finding. A repeated concern is evidence for a later decision, not permission to return PASS or edit target artifacts.
+Use the packaged `nlp_refinement/resources/prompts/review-phase.v5.md` prompt and return only the v5 schema. `caller-attested-redacted` is a caller declaration, not a proof that no secret remains; a narrow likely-secret guard may still reject persistence. Every finding must classify an NL artifact or an NL/host boundary with the permitted evidence plane and category; standard-code defects are out of scope. The adapter assigns finding IDs and rejects duplicate fingerprints whose severity, gate, invariant, or classification conflicts with the existing finding. A repeated concern is evidence for a later decision, not permission to return PASS or edit target artifacts.
 
 ## M5 human-only patch proposals
 
@@ -92,4 +94,4 @@ nlp-refinement-host review --allow-model-inference --run-id <run-id> \
   --observed-snapshot-hash <sha256>
 ```
 
-`--allow-model-inference` is an immediate confirmation for that external command; it is not persisted as a model-call authorization record. The external `M8ReviewCoordinator`, not the user, supplies the fixed persistence declaration for host-generated review/proposal content and StateStore checks it again before writing. This is separate from source handling: the Coordinator records whether its model view was unchanged or automatically redacted. It starts separate `reviewer` then `proposal` app-server threads with a requested `read-only` sandbox. The accepted boundary is the request and the host receipt when available, not proof of an enforced sandbox, native sub-Agent identity, or wider host permissions. It writes bounded host receipts and validated protocol artifacts only to SQLite; raw model output and event payloads remain in process memory. It never applies a returned diff or edits the artifact. Malformed output or transport failure blocks the run and requires the explicit `resume --retry-blocked` action above. See `docs/M8_HOST_COORDINATOR.md` for the full evidence boundary.
+`--allow-model-inference` is an immediate confirmation for that external command; it is not persisted as a model-call authorization record. The external `M8ReviewCoordinator`, not the user, supplies the fixed persistence declaration for host-generated review/proposal content and StateStore checks it again before writing. This is separate from source handling: the Coordinator records whether its model view was unchanged or automatically redacted. It starts separate `reviewer` then `proposal` app-server threads with a requested `read-only` sandbox. The accepted boundary is the request and the host receipt when available, not proof of an enforced sandbox, native sub-Agent identity, or wider host permissions. It writes bounded host receipts and validated protocol artifacts only to SQLite; raw model output and event payloads remain in this plugin's process memory, while Codex host session history is governed separately by Codex configuration. It never applies a returned diff or edits the artifact. Malformed output or transport failure blocks the run and requires the explicit `resume --retry-blocked` action above. See `docs/M8_HOST_COORDINATOR.md` for the full evidence boundary.

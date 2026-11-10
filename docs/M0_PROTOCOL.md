@@ -17,15 +17,16 @@ Skill, Agent dispatch, file repair, or target-project tests.
 | Formal state mode | `durable-local` is required for a formal run. |
 | Repair failure | Revert only the matching system-owned patch; stop on snapshot drift. |
 | Product scope | Natural-language-programming artifacts and their fixtures only. |
-| Hot retention | Retain full caller-attested-redacted terminal artifacts for 30 days. |
-| Archive retention | Retain content-free audit metadata from day 31 through day 180. |
-| Purge | Purge plugin-owned records and plugin-created archives on day 181. |
+| Retention | Retain full caller-attested-redacted terminal artifacts for 30 days. |
+| Purge | After 30 days, an explicitly confirmed sweep purges plugin-owned run records. |
 | Idle non-terminal run | Mark `STALE` after 14 inactive days. |
 
 The retention countdown begins when a run reaches a terminal state or becomes
 `STALE`. A changed policy applies to future runs. Earlier cleanup requires a
-visible preview and exact plan-hash confirmation. Logical purge does not claim
-forensic erasure from SQLite free pages, backups, WAL files, or external copies.
+visible preview and exact plan-hash confirmation. This policy covers only the
+plugin-owned SQLite ledger; it does not manage Codex host session history.
+Logical purge does not claim forensic erasure from SQLite free pages, backups,
+WAL files, or external copies.
 
 ## 3. Authority and trust boundary
 

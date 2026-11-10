@@ -44,7 +44,7 @@ def load_review_result(path: Path) -> dict[str, Any]:
 def validate_review_result(result: dict[str, Any]) -> None:
     if set(result) != REQUIRED_RESULT:
         raise ReviewInputError("review result has unexpected or missing fields")
-    if result["schema_version"] != "4.0" or result["phase_name"] != "review":
+    if result["schema_version"] != "5.0" or result["phase_name"] != "review":
         raise ReviewInputError("review result has an unsupported schema or phase")
     for field in ("reviewer_id", "summary"):
         if not isinstance(result[field], str) or not result[field].strip():
@@ -151,7 +151,7 @@ def ingest_review(
             existing = existing_by_fingerprint.get(incoming["fingerprint"])
             if existing is None:
                 finding = {
-                    "schema_version": "4.0",
+                    "schema_version": "5.0",
                     "finding_id": _next_finding_id(existing_findings),
                     "run_id": run_id,
                     "fingerprint": incoming["fingerprint"],

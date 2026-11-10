@@ -35,7 +35,13 @@ class PluginPackagingTests(unittest.TestCase):
         )
         self.assertEqual(compatibility["onboardingSkill"], "./skills/nlp-refine-setup/SKILL.md")
         self.assertTrue((ROOT / "skills" / "nlp-refine-setup" / "SKILL.md").is_file())
+        self.assertTrue((ROOT / "runtime-bootstrap-config.json").is_file())
+        self.assertTrue((ROOT / "scripts" / "nlp_refinement_runtime_setup.py").is_file())
         self.assertIn("nlp-refine-setup", (ROOT / "skills" / "nlp-refine" / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertIn(
+            "nlp_refinement_runtime_setup.py",
+            (ROOT / "skills" / "nlp-refine-setup" / "SKILL.md").read_text(encoding="utf-8"),
+        )
         self.assertFalse((ROOT / ".agents" / "skills" / "nlp-refine" / "SKILL.md").exists())
 
     def test_authoritative_documents_describe_the_accepted_host_boundary(self) -> None:

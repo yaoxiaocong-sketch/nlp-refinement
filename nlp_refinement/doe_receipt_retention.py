@@ -10,6 +10,8 @@ import re
 import stat
 import time
 
+from nlp_refinement.version import CLI_VERSION
+
 
 DEFAULT_FAILURE_EVIDENCE_ROOT = Path("~/.codex/refinement-loop/doe-failures").expanduser()
 FAILURE_EVIDENCE_RETENTION_SECONDS = 24 * 60 * 60
@@ -64,6 +66,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="nlp-refinement-doe-prune",
         description="Remove expired, redacted M8 DOE failure receipts without invoking a model.",
     )
+    parser.add_argument("--version", action="version", version=CLI_VERSION)
     parser.add_argument("--failure-evidence-root", type=Path, default=DEFAULT_FAILURE_EVIDENCE_ROOT)
     args = parser.parse_args(argv)
     removed = purge_expired_failure_receipts(args.failure_evidence_root, int(time.time()))

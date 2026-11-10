@@ -20,13 +20,15 @@ is a separately installed Python distribution; Plugin installation never
 installs it implicitly. For a published, configured release, the first
 `$nlp-refine` setup flow may present a pinned CLI installation plan and, only
 after explicit user confirmation, download, verify, and install that exact
-wheel. This source checkout has no production release URL or hash, so its setup
-flow deliberately stops instead of inventing a download source.
+wheel. The setup wrapper first checks all three CLI commands through
+`--version`; it treats an older command as incompatible rather than as a valid
+installation. A release configuration is valid only when its matching public
+GitHub Release manifest and wheel assets exist.
 
 Manual/offline installation remains supported:
 
 ```sh
-python3 -m pip install --user /path/to/nlp_refinement_cli-0.9.0-py3-none-any.whl
+python3 -m pip install --user /path/to/nlp_refinement_cli-0.9.1-py3-none-any.whl
 ```
 
 That distribution provides two deliberately separate execution commands plus a

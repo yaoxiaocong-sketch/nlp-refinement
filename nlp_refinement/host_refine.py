@@ -11,10 +11,12 @@ from nlp_refinement.host_execution_request import HostExecutionRequest
 from nlp_refinement.m8_review_coordinator import M8ReviewCoordinator, M8ReviewCoordinatorError
 from nlp_refinement.refine import default_state_root, output, public_status, snapshot_hash
 from nlp_refinement.state_store import StateStore, StateStoreError
+from nlp_refinement.version import CLI_VERSION
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="nlp-refinement-host")
+    parser.add_argument("--version", action="version", version=CLI_VERSION)
     parser.add_argument("--state-root", type=Path, default=default_state_root())
     subcommands = parser.add_subparsers(dest="command", required=True)
     review = subcommands.add_parser(

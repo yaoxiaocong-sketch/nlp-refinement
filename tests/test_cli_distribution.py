@@ -8,8 +8,11 @@ import tempfile
 import tomllib
 import unittest
 
+from nlp_refinement.doe_receipt_retention import main as prune_main
 from nlp_refinement.refine import build_parser, main
 from nlp_refinement.host_refine import build_parser as build_host_parser
+from nlp_refinement.host_refine import main as host_main
+from nlp_refinement.version import CLI_VERSION
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,12 +20,21 @@ SNAPSHOT = "a" * 64
 
 
 class CliDistributionTests(unittest.TestCase):
+    def test_every_public_command_reports_the_distribution_version(self) -> None:
+        for entrypoint in (main, host_main, prune_main):
+            output = io.StringIO()
+            with redirect_stdout(output), self.assertRaises(SystemExit) as exited:
+                entrypoint(["--version"])
+            self.assertEqual(exited.exception.code, 0)
+            self.assertEqual(output.getvalue(), f"{CLI_VERSION}\n")
+
     def test_distribution_declares_separate_normal_and_external_host_commands(self) -> None:
         with (ROOT / "pyproject.toml").open("rb") as handle:
             package = tomllib.load(handle)
         project = package["project"]
 
         self.assertEqual(project["name"], "nlp-refinement-cli")
+        self.assertEqual(project["version"], CLI_VERSION)
         self.assertEqual(package["build-system"]["requires"], ["setuptools", "wheel"])
         self.assertEqual(project["scripts"], {
             "nlp-refinement": "nlp_refinement.refine:main",

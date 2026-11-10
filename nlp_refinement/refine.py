@@ -22,6 +22,7 @@ from nlp_refinement.host_execution_request import HostExecutionRequest
 from nlp_refinement.review_adapter import ingest_review, load_review_result
 from nlp_refinement.sensitive_data import likely_secret_kind
 from nlp_refinement.state_store import FINAL_STATES, StateStore, StateStoreError
+from nlp_refinement.version import CLI_VERSION
 
 
 # Project identity is independent of the persisted protocol version.  Keep it
@@ -65,6 +66,7 @@ def output(value: dict[str, Any]) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="nlp-refinement")
+    parser.add_argument("--version", action="version", version=CLI_VERSION)
     parser.add_argument("--state-root", type=Path, default=default_state_root())
     subcommands = parser.add_subparsers(dest="command", required=True)
 

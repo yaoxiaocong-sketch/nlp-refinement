@@ -109,6 +109,13 @@ def _wheel_metadata_matches(raw: bytes, *, expected_version: str) -> bool:
     return fields.get("Name") == PACKAGE_NAME and fields.get("Version") == expected_version
 
 
+def _wheel_filename(url: str, *, expected_version: str) -> str | None:
+    """Return the one published filename accepted for this pure-Python wheel."""
+    name = Path(urlparse(url).path).name
+    expected = f"{PACKAGE_NAME.replace('-', '_')}-{expected_version}-py3-none-any.whl"
+    return name if name == expected else None
+
+
 def _release_is_compatible(release: dict[str, object], plugin: tuple[str, str]) -> bool:
     plugin_record = release.get("plugin")
     wheel = release.get("wheel")
@@ -204,9 +211,12 @@ def run(
         return _blocked("WHEEL_HASH_MISMATCH", completed=["release-manifest-verified"])
     if not _wheel_metadata_matches(wheel_bytes, expected_version=version):
         return _blocked("WHEEL_METADATA_INCOMPATIBLE", completed=["release-manifest-verified", "wheel-verified"])
+    wheel_filename = _wheel_filename(wheel_url, expected_version=version)
+    if wheel_filename is None:
+        return _blocked("WHEEL_FILENAME_INCOMPATIBLE", completed=["release-manifest-verified", "wheel-verified"])
 
     with tempfile.TemporaryDirectory(prefix="nlp-refinement-bootstrap-") as directory:
-        wheel_path = Path(directory) / "runtime.whl"
+        wheel_path = Path(directory) / wheel_filename
         wheel_path.write_bytes(wheel_bytes)
         try:
             run_command([

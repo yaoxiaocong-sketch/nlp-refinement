@@ -30,15 +30,15 @@ class RuntimeSetupTests(unittest.TestCase):
     def write_plugin_root(root: Path) -> Path:
         root.mkdir()
         (root / "plugin.json").write_text(
-            json.dumps({"name": "nlp-refinement-cli", "version": "0.9.3"}), encoding="utf-8"
+            json.dumps({"name": "nlp-refinement-cli", "version": "0.9.4"}), encoding="utf-8"
         )
         (root / "runtime-bootstrap-config.json").write_text(
             json.dumps({
                 "schema_version": "nlp-refinement-runtime-bootstrap/v1",
                 "plugin_name": "nlp-refinement-cli",
-                "plugin_version": "0.9.3",
+                "plugin_version": "0.9.4",
                 "release_manifest": {
-                    "url": "https://github.com/example/nlp-refinement/releases/download/v0.9.3/release.json",
+                    "url": "https://github.com/example/nlp-refinement/releases/download/v0.9.4/release.json",
                     "sha256": "a" * 64,
                 },
             }),
@@ -49,7 +49,7 @@ class RuntimeSetupTests(unittest.TestCase):
     def test_matching_path_commands_finish_without_download_or_install(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             plugin_root = self.write_plugin_root(Path(directory) / "plugin")
-            with patch.object(self.module, "_command_version", return_value="0.9.3"), \
+            with patch.object(self.module, "_command_version", return_value="0.9.4"), \
                  patch.object(self.module.bootstrap, "run") as bootstrap_run:
                 result = self.module.run(plugin_root=plugin_root, apply=False)
 
@@ -63,7 +63,7 @@ class RuntimeSetupTests(unittest.TestCase):
             expected = {
                 "status": "PLAN_READY",
                 "requires_confirmation": True,
-                "release_manifest_url": "https://github.com/example/nlp-refinement/releases/download/v0.9.3/release.json",
+                "release_manifest_url": "https://github.com/example/nlp-refinement/releases/download/v0.9.4/release.json",
                 "release_manifest_sha256": "a" * 64,
             }
             with patch.object(self.module, "_command_version", side_effect=["0.8.2", None, None]), \
@@ -71,7 +71,7 @@ class RuntimeSetupTests(unittest.TestCase):
                 result = self.module.run(plugin_root=plugin_root, apply=False)
 
         self.assertEqual(result, expected)
-        self.assertEqual(bootstrap_run.call_args.kwargs["release_manifest_url"], "https://github.com/example/nlp-refinement/releases/download/v0.9.3/release.json")
+        self.assertEqual(bootstrap_run.call_args.kwargs["release_manifest_url"], "https://github.com/example/nlp-refinement/releases/download/v0.9.4/release.json")
         self.assertEqual(bootstrap_run.call_args.kwargs["release_manifest_sha256"], "a" * 64)
         self.assertEqual(bootstrap_run.call_args.kwargs["plugin_manifest"], plugin_root / "plugin.json")
         self.assertFalse(bootstrap_run.call_args.kwargs["apply"])

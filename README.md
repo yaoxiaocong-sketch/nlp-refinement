@@ -28,7 +28,7 @@ GitHub Release manifest and wheel assets exist.
 Manual/offline installation remains supported:
 
 ```sh
-python3 -m pip install --user /path/to/nlp_refinement_cli-0.9.3-py3-none-any.whl
+python3 -m pip install --user /path/to/nlp_refinement_cli-0.9.4-py3-none-any.whl
 ```
 
 That distribution provides two deliberately separate execution commands plus a

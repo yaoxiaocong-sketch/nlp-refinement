@@ -144,6 +144,28 @@ class RuntimeBootstrapTests(unittest.TestCase):
         )
         self.assertEqual(result["commands"], self.release["commands"])
 
+    def test_apply_preserves_the_valid_published_wheel_filename_for_pip(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_plugin_manifest(root)
+            script_dir = self.write_script_dir(root)
+            release_bytes = json.dumps(self.release, sort_keys=True).encode("utf-8")
+            commands: list[list[str]] = []
+
+            with patch.object(self.module.shutil, "which", side_effect=lambda name: str(script_dir / name)):
+                result = self.module.run(
+                    release_manifest_url="https://publisher.example.invalid/releases/0.9.0.json",
+                    release_manifest_sha256=hashlib.sha256(release_bytes).hexdigest(),
+                    plugin_manifest=manifest,
+                    apply=True,
+                    download=lambda url, limit: release_bytes if url.endswith(".json") else self.wheel_bytes,
+                    run_command=lambda command: commands.append(command),
+                    script_dir=script_dir,
+                )
+
+        self.assertEqual(result["status"], "INSTALLED")
+        self.assertEqual(Path(commands[0][-1]).name, "nlp_refinement_cli-0.9.0-py3-none-any.whl")
+
     def test_apply_stops_after_wheel_hash_mismatch_before_pip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -195,6 +217,28 @@ class RuntimeBootstrapTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "BLOCKED")
         self.assertEqual(result["code"], "WHEEL_METADATA_INCOMPATIBLE")
+        self.assertEqual(commands, [])
+
+    def test_apply_rejects_an_invalid_published_wheel_filename_before_pip(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_plugin_manifest(root)
+            script_dir = self.write_script_dir(root)
+            self.release["wheel"]["url"] = "https://downloads.example.invalid/runtime.whl"
+            release_bytes = json.dumps(self.release, sort_keys=True).encode("utf-8")
+            commands: list[list[str]] = []
+
+            result = self.module.run(
+                release_manifest_url="https://publisher.example.invalid/releases/0.9.0.json",
+                release_manifest_sha256=hashlib.sha256(release_bytes).hexdigest(),
+                plugin_manifest=manifest,
+                apply=True,
+                download=lambda url, limit: release_bytes if url.endswith(".json") else self.wheel_bytes,
+                run_command=lambda command: commands.append(command),
+                script_dir=script_dir,
+            )
+
+        self.assertEqual(result["code"], "WHEEL_FILENAME_INCOMPATIBLE")
         self.assertEqual(commands, [])
 
     def test_rejects_non_https_release_urls_before_downloading(self) -> None:

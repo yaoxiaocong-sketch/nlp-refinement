@@ -1,6 +1,6 @@
 {
   "name": "nlp-refinement-cli",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "Durable-local, review-only refinement for natural-language-programming artifacts.",
   "skills": "./skills/",
   "requires_local_executor": true,

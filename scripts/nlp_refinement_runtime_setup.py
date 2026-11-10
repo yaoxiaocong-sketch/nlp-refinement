@@ -111,12 +111,18 @@ def run(*, plugin_root: Path, apply: bool) -> dict[str, object]:
             "commands": list(commands),
             "completed_stages": ["commands-visible"],
         }
-    return bootstrap.run(
+    result = bootstrap.run(
         release_manifest_url=release_manifest_url,
         release_manifest_sha256=release_manifest_sha256,
         plugin_manifest=manifest,
         apply=apply,
     )
+    if result.get("status") == "PLAN_READY":
+        return result | {
+            "release_manifest_url": release_manifest_url,
+            "release_manifest_sha256": release_manifest_sha256,
+        }
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:

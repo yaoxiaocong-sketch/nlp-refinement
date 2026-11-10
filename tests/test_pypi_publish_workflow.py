@@ -6,6 +6,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "pypi-publish.yml"
+VERIFY_WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
 
 
 class PyPIPublishWorkflowTests(unittest.TestCase):
@@ -33,6 +34,18 @@ class PyPIPublishWorkflowTests(unittest.TestCase):
         self.assertIn("nlp-refinement", guide)
         self.assertIn("pypi-publish.yml", guide)
         self.assertIn("not publish", guide)
+
+    def test_verification_workflow_has_no_pypi_authority(self) -> None:
+        workflow = VERIFY_WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("push:", workflow)
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("permissions: {}", workflow)
+        self.assertIn("contents: read", workflow)
+        self.assertNotIn("id-token: write", workflow)
+        self.assertNotIn("gh-action-pypi-publish", workflow)
+        self.assertNotIn("actions/upload-artifact", workflow)
+        self.assertNotIn("secrets.", workflow)
 
 
 if __name__ == "__main__":

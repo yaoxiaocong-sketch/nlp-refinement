@@ -89,12 +89,13 @@ class M8DoeAndSkillEntryTests(unittest.TestCase):
 
     def test_doe_report_path_rejects_project_files(self) -> None:
         module = runpy.run_path(str(ROOT / "scripts" / "run_m8_host_doe.py"))
-        with self.assertRaisesRegex(ValueError, "/private/tmp"):
+        self.assertEqual(module["TEMP_REPORT_ROOT"], Path(tempfile.gettempdir()).resolve())
+        with self.assertRaisesRegex(ValueError, str(module["TEMP_REPORT_ROOT"])):
             module["_validated_report_path"](ROOT / "do-not-write.json")
 
     def test_doe_report_is_created_exclusively_and_is_private(self) -> None:
         module = runpy.run_path(str(ROOT / "scripts" / "run_m8_host_doe.py"))
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as directory:
+        with tempfile.TemporaryDirectory(dir=module["TEMP_REPORT_ROOT"]) as directory:
             report = module["_validated_report_path"](Path(directory) / "result.json")
             module["_write_new_private_report"](report, '{"status":"passed"}')
             self.assertEqual(report.read_text(encoding="utf-8"), '{"status":"passed"}\n')

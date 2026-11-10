@@ -242,9 +242,10 @@ free-form validator text, or a dynamic finding ID. This is DOE-only evidence;
 normal `host-review` does not add this capture.
 
 If a durable redacted summary is needed because the terminal cannot retain
-stdout, pass a new path below `/private/tmp` with `--report-file`; the script
-refuses project paths and existing files. A failed or timed-out DOE is evidence
-of a blocked host path, not evidence that M8 succeeded.
+stdout, pass a new path below the current system temporary root with
+`--report-file`; the script refuses project paths and existing files. A failed
+or timed-out DOE is evidence of a blocked host path, not evidence that M8
+succeeded.
 
 ## Separate diagnostic DOE
 

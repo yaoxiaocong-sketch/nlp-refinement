@@ -49,7 +49,7 @@ See [first-use runtime bootstrap](docs/RUNTIME_BOOTSTRAP.md) for the plan,
 confirmation, hash-check, failure, and platform boundaries.
 See [PyPI Trusted Publishing](docs/PYPI_TRUSTED_PUBLISHING.md) for the
 manual-only public-package release path; adding that workflow does not publish
-a package.
+a package. The separate Linux verification workflow has no PyPI authority.
 
 `nlp-refinement-doe-prune` is also a no-model command. It removes only expired,
 well-formed redacted M8 DOE failure receipts from its owner-only evidence root;

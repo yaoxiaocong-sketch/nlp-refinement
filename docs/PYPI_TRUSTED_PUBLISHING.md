@@ -23,6 +23,11 @@ The empty environment is intentional: the workflow declares no GitHub
 environment. Changing either side later requires changing the matching value
 on the other side before a publish can succeed.
 
+`.github/workflows/verify.yml` separately runs the same tests and package
+build on Linux for pushes and pull requests. It has no PyPI authority and never
+uploads a distribution. A failed verification must be fixed before manually
+running the publishing workflow.
+
 ## What the workflow does
 
 `.github/workflows/pypi-publish.yml` has only a `workflow_dispatch` trigger.

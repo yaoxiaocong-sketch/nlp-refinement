@@ -26,7 +26,7 @@ import time
 from typing import Any, Callable
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TEMP_REPORT_ROOT = Path("/private/tmp").resolve()
+TEMP_REPORT_ROOT = Path(tempfile.gettempdir()).resolve()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -280,7 +280,7 @@ def _validated_report_path(candidate: Path) -> Path:
     try:
         report_file.relative_to(TEMP_REPORT_ROOT)
     except ValueError as error:
-        raise ValueError("DOE report file must be below /private/tmp") from error
+        raise ValueError(f"DOE report file must be below {TEMP_REPORT_ROOT}") from error
     if report_file.exists():
         raise ValueError("refusing to overwrite an existing DOE report file")
     if not report_file.parent.is_dir():

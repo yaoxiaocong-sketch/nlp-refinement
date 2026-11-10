@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tempfile
 import unittest
 
 from nlp_refinement.host_client import HostResult
@@ -36,7 +37,7 @@ class AppServerHostExecutorTests(unittest.TestCase):
             for role in ("reviewer", "proposal"):
                 result = executor.run_read_only_role(
                     role=role,
-                    cwd=Path("/private/tmp"),
+                    cwd=Path(tempfile.gettempdir()),
                     developer_instructions="fixture",
                     prompt="fixture",
                     output_schema={},
@@ -53,7 +54,7 @@ class AppServerHostExecutorTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "must be entered"):
             executor.run_read_only_role(
                 role="reviewer",
-                cwd=Path("/private/tmp"),
+                cwd=Path(tempfile.gettempdir()),
                 developer_instructions="fixture",
                 prompt="fixture",
                 output_schema={},

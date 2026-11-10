@@ -45,3 +45,10 @@ This is desktop/CLI-local behavior only. It is not a claim that web, mobile,
 or IDE Plugin surfaces can execute a local Python bootstrap. It also does not
 use a lifecycle hook: public Plugin distribution and hook trust have different
 host constraints.
+
+For a public release, the GitHub Release wheel is the artifact authority. PyPI
+receives the same wheel bytes through the manual trusted-publishing workflow;
+it is not a second build source. The publisher prepares the versioned manifest
+and bootstrap configuration from one completed wheel before creating the
+GitHub Release. See [PyPI Trusted Publishing](PYPI_TRUSTED_PUBLISHING.md) for
+the release sequence.

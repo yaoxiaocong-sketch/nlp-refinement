@@ -23,6 +23,9 @@ class PyPIPublishWorkflowTests(unittest.TestCase):
         self.assertIn("pypa/gh-action-pypi-publish@release/v1", workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)
         self.assertIn("actions/download-artifact@v4", workflow)
+        self.assertIn("fetch_verified_runtime_release.py", workflow)
+        self.assertNotIn("python -m build", workflow)
+        self.assertNotIn("pip install --upgrade build", workflow)
         self.assertNotIn("secrets.", workflow)
         self.assertNotIn("password:", workflow)
 
@@ -45,6 +48,8 @@ class PyPIPublishWorkflowTests(unittest.TestCase):
         self.assertNotIn("id-token: write", workflow)
         self.assertNotIn("gh-action-pypi-publish", workflow)
         self.assertNotIn("actions/upload-artifact", workflow)
+        self.assertNotIn("python -m build", workflow)
+        self.assertNotIn("pip install --upgrade build", workflow)
         self.assertNotIn("secrets.", workflow)
 
 

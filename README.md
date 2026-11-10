@@ -28,7 +28,7 @@ GitHub Release manifest and wheel assets exist.
 Manual/offline installation remains supported:
 
 ```sh
-python3 -m pip install --user /path/to/nlp_refinement_cli-0.9.2-py3-none-any.whl
+python3 -m pip install --user /path/to/nlp_refinement_cli-0.9.3-py3-none-any.whl
 ```
 
 That distribution provides two deliberately separate execution commands plus a
@@ -50,8 +50,10 @@ stop and install the matching CLI; do not fall back to a source checkout,
 See [first-use runtime bootstrap](docs/RUNTIME_BOOTSTRAP.md) for the plan,
 confirmation, hash-check, failure, and platform boundaries.
 See [PyPI Trusted Publishing](docs/PYPI_TRUSTED_PUBLISHING.md) for the
-manual-only public-package release path; adding that workflow does not publish
-a package. The separate Linux verification workflow has no PyPI authority.
+manual-only public-package release path. Each version builds one wheel, which
+is first released on GitHub and then verified and published unchanged to PyPI;
+adding that workflow does not publish a package. The separate Linux source
+verification workflow has no PyPI authority.
 
 `nlp-refinement-doe-prune` is also a no-model command. It removes only expired,
 well-formed redacted M8 DOE failure receipts from its owner-only evidence root;

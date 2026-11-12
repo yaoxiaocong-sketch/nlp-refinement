@@ -229,6 +229,30 @@ class StateStore:
                         raise StateStoreError(
                             f"legacy ledger data for {row['run_id']} is unsupported; export or remove it explicitly"
                         )
+            if "batches" in tables:
+                batch_columns = {
+                    row["name"] for row in connection.execute("PRAGMA table_info(batches)")
+                }
+                item_columns = {
+                    row["name"] for row in connection.execute("PRAGMA table_info(batch_items)")
+                }
+                event_columns = {
+                    row["name"] for row in connection.execute("PRAGMA table_info(batch_events)")
+                }
+                if batch_columns != {
+                    "batch_id", "project_key", "inventory_hash", "selected_count", "created_at", "updated_at",
+                } or item_columns != {
+                    "batch_id", "relative_path", "snapshot_hash", "child_run_id", "member_status", "purged_at",
+                } or event_columns != {
+                    "sequence", "batch_id", "event_type", "payload_json", "created_at",
+                }:
+                    raise StateStoreError(
+                        "ledger lacks the current Batch manifest schema; export or remove it explicitly before using this development build"
+                    )
+            elif "runs" in tables:
+                raise StateStoreError(
+                    "ledger lacks the Batch schema; export or remove it explicitly before using this development build"
+                )
             connection.execute("PRAGMA journal_mode = WAL")
             connection.execute("PRAGMA foreign_keys = ON")
             connection.executescript(
@@ -285,6 +309,35 @@ class StateStore:
                     payload_json TEXT NOT NULL,
                     created_at INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS batches (
+                    batch_id TEXT PRIMARY KEY,
+                    project_key TEXT NOT NULL,
+                    inventory_hash TEXT NOT NULL,
+                    selected_count INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS batch_items (
+                    batch_id TEXT NOT NULL REFERENCES batches(batch_id) ON DELETE CASCADE,
+                    relative_path TEXT NOT NULL,
+                    snapshot_hash TEXT NOT NULL,
+                    child_run_id TEXT REFERENCES runs(run_id) ON DELETE SET NULL,
+                    member_status TEXT NOT NULL CHECK (member_status IN ('ACTIVE', 'PURGED')),
+                    purged_at INTEGER,
+                    PRIMARY KEY (batch_id, relative_path),
+                    UNIQUE (child_run_id),
+                    CHECK (
+                        (member_status = 'ACTIVE' AND child_run_id IS NOT NULL AND purged_at IS NULL)
+                        OR (member_status = 'PURGED' AND child_run_id IS NULL AND purged_at IS NOT NULL)
+                    )
+                );
+                CREATE TABLE IF NOT EXISTS batch_events (
+                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    batch_id TEXT NOT NULL REFERENCES batches(batch_id) ON DELETE CASCADE,
+                    event_type TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
                 """
             )
         if not self.database_path.exists():
@@ -325,6 +378,124 @@ class StateStore:
         if row is None:
             raise KeyError(f"run not found: {run_id}")
         return self._run_from_row(row)
+
+    def create_batch_with_ready_children(
+        self, batch: dict[str, Any], children: list[tuple[dict[str, Any], dict[str, Any], str]], now: int,
+    ) -> dict[str, Any]:
+        required = {"batch_id", "project_key", "inventory_hash"}
+        if set(batch) != required or re.fullmatch(r"batch_[a-z0-9]{12,64}", str(batch.get("batch_id"))) is None:
+            raise ValueError("batch is invalid")
+        if any(re.fullmatch(r"[a-f0-9]{64}", str(batch[field])) is None for field in ("project_key", "inventory_hash")):
+            raise ValueError("batch is invalid")
+        if not children:
+            raise ValueError("batch requires at least one child")
+        paths: set[str] = set()
+        with self._transaction() as connection:
+            connection.execute(
+                "INSERT INTO batches (batch_id, project_key, inventory_hash, selected_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (batch["batch_id"], batch["project_key"], batch["inventory_hash"], len(children), now, now),
+            )
+            for run, anchor, relative_path in children:
+                self._validate_new_run(run)
+                if not relative_path or relative_path in paths or run["project_key"] != batch["project_key"]:
+                    raise ValueError("batch child is invalid")
+                paths.add(relative_path)
+                connection.execute(
+                    "INSERT INTO runs (run_id, project_key, target_snapshot_hash, current_snapshot_hash, state, outcome, revision, run_json, immutable_anchor_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (run["run_id"], run["project_key"], run["target_snapshot_hash"], run["current_snapshot_hash"], run["state"], run["outcome"], run["revision"], self._dump(run), self._dump(anchor), now, now),
+                )
+                self._record_event(connection, run["run_id"], 0, "run-created", {"immutable_anchor_hash": self._digest(self._dump(anchor))}, now)
+                ready = dict(run)
+                ready.update({"state": "READY", "revision": 1})
+                self._write_run(connection, ready, now, increment_revision=False)
+                self._record_event(connection, run["run_id"], 1, "state-transition", {"state": "READY", "outcome": "IN_PROGRESS"}, now)
+                connection.execute(
+                    "INSERT INTO batch_items (batch_id, relative_path, snapshot_hash, child_run_id, member_status, purged_at) VALUES (?, ?, ?, ?, ?, NULL)",
+                    (batch["batch_id"], relative_path, run["target_snapshot_hash"], run["run_id"], "ACTIVE"),
+                )
+            connection.execute(
+                "INSERT INTO batch_events (batch_id, event_type, payload_json, created_at) VALUES (?, ?, ?, ?)",
+                (batch["batch_id"], "batch-created", self._dump({"selected_count": len(children)}), now),
+            )
+        return self.get_batch(str(batch["batch_id"]))
+
+    def get_batch(self, batch_id: str) -> dict[str, Any]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT b.batch_id, b.project_key, b.inventory_hash, b.selected_count,
+                    i.relative_path, i.snapshot_hash, i.child_run_id, i.member_status, i.purged_at,
+                    r.state, r.outcome
+                FROM batches b
+                LEFT JOIN batch_items i ON i.batch_id = b.batch_id
+                LEFT JOIN runs r ON r.run_id = i.child_run_id
+                WHERE b.batch_id = ?
+                ORDER BY i.relative_path
+                """,
+                (batch_id,),
+            ).fetchall()
+        if not rows:
+            raise KeyError(f"batch not found: {batch_id}")
+        rendered_items = [
+            {
+                "relative_path": row["relative_path"],
+                "snapshot_hash": row["snapshot_hash"],
+                "child_run_id": row["child_run_id"],
+                "member_status": row["member_status"],
+                "purged_at": row["purged_at"],
+                "state": row["state"],
+                "outcome": row["outcome"],
+            }
+            for row in rows
+            if row["relative_path"] is not None
+        ]
+        selected_count = int(rows[0]["selected_count"])
+        if len(rendered_items) != selected_count:
+            raise StateStoreError("batch item manifest is incomplete")
+        for item in rendered_items:
+            if (item["member_status"] == "ACTIVE") != (item["child_run_id"] is not None):
+                raise StateStoreError("batch member retention state is inconsistent")
+        active_items = [item for item in rendered_items if item["member_status"] == "ACTIVE"]
+        purged_count = selected_count - len(active_items)
+        by_state: dict[str, int] = {}
+        for item in active_items:
+            state = str(item["state"])
+            by_state[state] = by_state.get(state, 0) + 1
+        return {
+            "batch_id": rows[0]["batch_id"],
+            "project_key": rows[0]["project_key"],
+            "inventory_hash": rows[0]["inventory_hash"],
+            "status": "PARTIALLY_PURGED" if purged_count else self._derived_batch_status(active_items),
+            "items": rendered_items,
+            "summary": {
+                "selected_count": selected_count,
+                "active_child_count": len(active_items),
+                "purged_child_count": purged_count,
+                "by_state": dict(sorted(by_state.items())),
+            },
+        }
+
+    def list_batch_events(self, batch_id: str) -> list[dict[str, Any]]:
+        """Return the content-free audit events for one retained Batch."""
+        with self._connection() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if exists is None:
+                raise KeyError(f"batch not found: {batch_id}")
+            rows = connection.execute(
+                "SELECT sequence, event_type, payload_json, created_at FROM batch_events WHERE batch_id = ? ORDER BY sequence",
+                (batch_id,),
+            ).fetchall()
+        return [
+            {
+                "sequence": row["sequence"],
+                "event_type": row["event_type"],
+                "payload": json.loads(row["payload_json"]),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
 
     def acquire_lease(self, run_id: str, owner_session_id: str, now: int, ttl_seconds: int = 600) -> dict[str, Any]:
         if ttl_seconds <= 0:
@@ -775,7 +946,7 @@ class StateStore:
                     updated = self._write_run(connection, run, now)
                     self._record_event(connection, run_id, updated["revision"], "retention-stale", {}, now)
                 elif kind == "purge-run":
-                    connection.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+                    self._purge_run_with_batch_members(connection, run_id, now)
                 else:  # defensive: `_retention_actions` is the sole producer.
                     raise StateStoreError(f"unsupported retention action: {kind}")
                 completed.append(action)
@@ -808,6 +979,42 @@ class StateStore:
 
     def _retention_plan_hash(self, actions: list[dict[str, Any]]) -> str:
         return self._digest(self._dump({"policy_version": "5.0", "actions": actions}))
+
+    def _purge_run_with_batch_members(self, connection: sqlite3.Connection, run_id: str, now: int) -> None:
+        """Purge a run while keeping a still-active Batch manifest truthful."""
+        batch_rows = connection.execute(
+            "SELECT batch_id FROM batch_items WHERE child_run_id = ?",
+            (run_id,),
+        ).fetchall()
+        connection.execute(
+            "UPDATE batch_items SET child_run_id = NULL, member_status = ?, purged_at = ? WHERE child_run_id = ?",
+            ("PURGED", now, run_id),
+        )
+        connection.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+        for row in batch_rows:
+            batch_id = str(row["batch_id"])
+            counts = connection.execute(
+                "SELECT COUNT(*) AS selected_count, SUM(member_status = 'ACTIVE') AS active_child_count FROM batch_items WHERE batch_id = ?",
+                (batch_id,),
+            ).fetchone()
+            active_count = int(counts["active_child_count"] or 0)
+            if active_count == 0:
+                connection.execute("DELETE FROM batches WHERE batch_id = ?", (batch_id,))
+                continue
+            selected_count = int(counts["selected_count"])
+            connection.execute(
+                "UPDATE batches SET updated_at = ? WHERE batch_id = ?",
+                (now, batch_id),
+            )
+            connection.execute(
+                "INSERT INTO batch_events (batch_id, event_type, payload_json, created_at) VALUES (?, ?, ?, ?)",
+                (
+                    batch_id,
+                    "batch-member-purged",
+                    self._dump({"active_child_count": active_count, "purged_child_count": selected_count - active_count}),
+                    now,
+                ),
+            )
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -1016,6 +1223,22 @@ class StateStore:
             ),
         )
         return run
+
+    @staticmethod
+    def _derived_batch_status(children: list[sqlite3.Row]) -> str:
+        if not children:
+            return "PARTIAL"
+        states = {str(child["state"]) for child in children}
+        outcomes = {str(child["outcome"]) for child in children}
+        if "BLOCKED" in states:
+            return "BLOCKED"
+        if "NEEDS_USER_DECISION" in states:
+            return "NEEDS_USER_DECISION"
+        if states == {"CANCELLED"}:
+            return "CANCELLED"
+        if states <= FINAL_STATES:
+            return "COMPLETE" if outcomes <= {"PASS", "PASS_WITH_ACCEPTED_RISK", "NO_MATERIAL_DELTA"} else "PARTIAL"
+        return "READY" if states == {"READY"} else "DISPATCHING"
 
     @staticmethod
     def _record_event(connection: sqlite3.Connection, run_id: str, revision: int, event_type: str, payload: dict[str, Any], now: int) -> None:

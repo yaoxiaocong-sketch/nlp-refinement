@@ -92,6 +92,11 @@ M1 StateStore tests are included in the same `unittest` command.
   plugin-owned SQLite ledger for 30 days.
 - After 30 days, a confirmed retention sweep purges the entire plugin-owned
   run and its cascading ledger records; there is no intermediate archive.
+- A Batch is a content-free selection manifest, not a parent workflow state
+  machine. Its status is derived only when queried. When retention purges one
+  child while others remain, the member is marked `PURGED` and `batch-status`
+  reports `PARTIALLY_PURGED`; when the last child is purged, the Batch manifest
+  and its Batch events are purged too.
 - Mark a non-terminal run `STALE` after 14 days without activity; it follows
   the same lifecycle.
 - `retention-preview` is read-only. `retention-sweep --confirm-plan-hash` may

@@ -4,6 +4,7 @@ from contextlib import redirect_stderr
 import io
 import json
 import hashlib
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -70,6 +71,342 @@ class RefineCommandTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         return json.loads(completed.stdout)
+
+    def current_inventory_hash(self) -> str:
+        completed = self.invoke("scan", str(self.target))
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return str(json.loads(completed.stdout)["inventory"]["inventory_hash"])
+
+    def test_scan_is_read_only_and_does_not_create_a_state_ledger(self) -> None:
+        artifact = self.target / "SKILL.md"
+        artifact.write_text("# fixture\n", encoding="utf-8")
+
+        completed = self.invoke("scan", str(self.target))
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        rendered = json.loads(completed.stdout)
+        self.assertEqual(rendered["command"], "scan")
+        self.assertEqual(rendered["inventory"]["scan_status"], "complete")
+        self.assertEqual(rendered["inventory"]["candidates"][0]["relative_path"], "SKILL.md")
+        self.assertFalse((self.state_root / "state.db").exists())
+
+    def test_batch_create_atomically_creates_ready_child_runs_without_model_calls(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+        (self.target / "plugin.json").write_text("{}\n", encoding="utf-8")
+
+        created = self.invoke(
+            "batch-create",
+            str(self.target),
+            "--all",
+            "--expected-inventory-hash",
+            self.current_inventory_hash(),
+        )
+
+        self.assertEqual(created.returncode, 0, created.stderr)
+        result = json.loads(created.stdout)
+        self.assertTrue(result["no_model_call_attestation"])
+        self.assertTrue(result["no_target_write_attestation"])
+        batch = result["batch"]
+        self.assertEqual(batch["status"], "READY")
+        self.assertEqual(
+            batch["summary"],
+            {"selected_count": 2, "active_child_count": 2, "purged_child_count": 0, "by_state": {"READY": 2}},
+        )
+        self.assertEqual([item["relative_path"] for item in batch["items"]], ["AGENTS.md", "plugin.json"])
+        self.assertTrue(all(item["state"] == "READY" for item in batch["items"]))
+        inspected = self.invoke("batch-status", "--batch-id", batch["batch_id"])
+        self.assertEqual(inspected.returncode, 0, inspected.stderr)
+        self.assertEqual(json.loads(inspected.stdout)["batch"], batch)
+
+    def test_batch_create_requires_a_confirmed_inventory_hash_before_initializing_a_ledger(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+
+        created = self.invoke("batch-create", str(self.target), "--all")
+
+        self.assertEqual(created.returncode, 2)
+        self.assertFalse((self.state_root / "state.db").exists())
+
+    def test_batch_create_rejects_an_invalid_inventory_hash_before_initializing_a_ledger(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+
+        created = self.invoke(
+            "batch-create",
+            str(self.target),
+            "--all",
+            "--expected-inventory-hash",
+            "not-a-sha256",
+        )
+
+        self.assertEqual(created.returncode, 2)
+        self.assertFalse((self.state_root / "state.db").exists())
+
+    def test_batch_create_stops_before_ledger_creation_when_confirmed_inventory_has_drifted(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# initial rules\n", encoding="utf-8")
+        scanned = json.loads(self.invoke("scan", str(self.target)).stdout)
+        expected_inventory_hash = scanned["inventory"]["inventory_hash"]
+        artifact.write_text("# changed rules\n", encoding="utf-8")
+
+        created = self.invoke(
+            "batch-create",
+            str(self.target),
+            "--all",
+            "--expected-inventory-hash",
+            expected_inventory_hash,
+        )
+
+        self.assertEqual(created.returncode, 0, created.stderr)
+        result = json.loads(created.stdout)
+        self.assertEqual(result["command"], "batch-create")
+        self.assertEqual(result["disposition"], "INVENTORY_STALE")
+        self.assertEqual(result["expected_inventory_hash"], expected_inventory_hash)
+        self.assertNotEqual(result["observed_inventory_hash"], expected_inventory_hash)
+        self.assertTrue(result["no_model_call_attestation"])
+        self.assertTrue(result["no_target_write_attestation"])
+        self.assertFalse((self.state_root / "state.db").exists())
+
+    def test_batch_rejects_a_selection_outside_the_current_inventory_without_runs(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+
+        created = self.invoke(
+            "batch-create",
+            str(self.target),
+            "--select",
+            "missing.md",
+            "--expected-inventory-hash",
+            self.current_inventory_hash(),
+        )
+
+        self.assertEqual(created.returncode, 2)
+        self.assertFalse((self.state_root / "state.db").exists())
+
+    def test_batch_status_is_derived_from_active_children_without_persisted_status_events(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+        created = json.loads(
+            self.invoke(
+                "batch-create",
+                str(self.target),
+                "--all",
+                "--expected-inventory-hash",
+                self.current_inventory_hash(),
+            ).stdout
+        )["batch"]
+        child_run_id = created["items"][0]["child_run_id"]
+        store = StateStore(self.state_root / "state.db")
+        run = store.get_run(child_run_id)
+        lease = store.acquire_lease(child_run_id, "fixture", now=100, ttl_seconds=60)
+        store.transition(child_run_id, run["revision"], lease["token"], "BLOCKED", "BLOCKED", run["current_snapshot_hash"], now=101)
+        store.release_lease(child_run_id, lease["token"], now=101)
+        self.assertEqual(store.get_batch(created["batch_id"])["status"], "BLOCKED")
+        blocked_run = store.get_run(child_run_id)
+        retry_lease = store.acquire_lease(child_run_id, "fixture-retry", now=102, ttl_seconds=60)
+        store.transition(
+            child_run_id,
+            blocked_run["revision"],
+            retry_lease["token"],
+            "READY",
+            "IN_PROGRESS",
+            blocked_run["current_snapshot_hash"],
+            now=103,
+        )
+        self.assertEqual(store.get_batch(created["batch_id"])["status"], "READY")
+        current = store.get_run(child_run_id)
+        for next_state, next_outcome, timestamp in (
+            ("REVIEWING", "IN_PROGRESS", 104),
+            ("TRIAGING", "IN_PROGRESS", 105),
+            ("REPAIRING", "IN_PROGRESS", 106),
+            ("VERIFYING", "IN_PROGRESS", 107),
+            ("REREVIEWING", "IN_PROGRESS", 108),
+            ("INTEGRITY_CHECK", "IN_PROGRESS", 109),
+            ("PASS", "PASS", 110),
+        ):
+            current = store.transition(
+                child_run_id,
+                current["revision"],
+                retry_lease["token"],
+                next_state,
+                next_outcome,
+                current["current_snapshot_hash"],
+                now=timestamp,
+            )
+        store.release_lease(child_run_id, retry_lease["token"], now=110)
+        self.assertEqual(store.get_batch(created["batch_id"])["status"], "COMPLETE")
+        with store._connection() as connection:
+            events = connection.execute(
+                "SELECT event_type, payload_json FROM batch_events WHERE batch_id = ? ORDER BY sequence",
+                (created["batch_id"],),
+            ).fetchall()
+        self.assertEqual(
+            [event["event_type"] for event in events],
+            ["batch-created"],
+        )
+
+    def test_retention_marks_a_batch_member_purged_then_removes_an_empty_batch(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+        (self.target / "plugin.json").write_text("{}\n", encoding="utf-8")
+        batch = json.loads(
+            self.invoke(
+                "batch-create",
+                str(self.target),
+                "--all",
+                "--expected-inventory-hash",
+                self.current_inventory_hash(),
+            ).stdout
+        )["batch"]
+        store = StateStore(self.state_root / "state.db")
+        first_child, second_child = (item["child_run_id"] for item in batch["items"])
+
+        self._advance_ready_run_to_pass(store, first_child, start_at=10)
+        self._set_updated_at(store, first_child, 0)
+        retention_now = 31 * 24 * 60 * 60
+        first_plan = store.retention_preview(retention_now)
+        self.assertEqual(first_plan["actions"], [{"action": "purge-run", "run_id": first_child}])
+        store.apply_retention(first_plan["plan_hash"], retention_now)
+
+        partial = store.get_batch(batch["batch_id"])
+        self.assertEqual(partial["status"], "PARTIALLY_PURGED")
+        self.assertEqual(
+            partial["summary"],
+            {"selected_count": 2, "active_child_count": 1, "purged_child_count": 1, "by_state": {"READY": 1}},
+        )
+        self.assertEqual([item["member_status"] for item in partial["items"]], ["PURGED", "ACTIVE"])
+        self.assertIsNone(partial["items"][0]["child_run_id"])
+        self.assertEqual(partial["items"][1]["child_run_id"], second_child)
+        with store._connection() as connection:
+            events = connection.execute(
+                "SELECT event_type, payload_json FROM batch_events WHERE batch_id = ? ORDER BY sequence",
+                (batch["batch_id"],),
+            ).fetchall()
+        self.assertEqual([event["event_type"] for event in events], ["batch-created", "batch-member-purged"])
+        self.assertEqual(
+            json.loads(events[1]["payload_json"]),
+            {"active_child_count": 1, "purged_child_count": 1},
+        )
+
+        self._advance_ready_run_to_pass(store, second_child, start_at=20)
+        self._set_updated_at(store, second_child, 0)
+        final_plan = store.retention_preview(retention_now)
+        self.assertEqual(final_plan["actions"], [{"action": "purge-run", "run_id": second_child}])
+        store.apply_retention(final_plan["plan_hash"], retention_now)
+        with self.assertRaises(KeyError):
+            store.get_batch(batch["batch_id"])
+        with store._connection() as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM batches").fetchone()[0], 0)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM batch_items").fetchone()[0], 0)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM batch_events").fetchone()[0], 0)
+
+    def test_cli_retention_preview_and_sweep_keep_batch_status_consistent(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+        (self.target / "plugin.json").write_text("{}\n", encoding="utf-8")
+        batch = json.loads(
+            self.invoke(
+                "batch-create",
+                str(self.target),
+                "--all",
+                "--expected-inventory-hash",
+                self.current_inventory_hash(),
+            ).stdout
+        )["batch"]
+        first_child, second_child = (item["child_run_id"] for item in batch["items"])
+        store = StateStore(self.state_root / "state.db")
+        self._advance_ready_run_to_pass(store, first_child, start_at=10)
+        self._set_updated_at(store, first_child, 0)
+        retention_now = 31 * 24 * 60 * 60
+
+        first_preview_command = self.invoke("retention-preview", "--now", str(retention_now))
+        self.assertEqual(first_preview_command.returncode, 0, first_preview_command.stderr)
+        first_preview = json.loads(first_preview_command.stdout)
+        self.assertEqual(first_preview["actions"], [{"action": "purge-run", "run_id": first_child}])
+        first_sweep = self.invoke(
+            "retention-sweep",
+            "--confirm-plan-hash",
+            first_preview["plan_hash"],
+            "--now",
+            str(retention_now),
+        )
+        self.assertEqual(first_sweep.returncode, 0, first_sweep.stderr)
+        self.assertEqual(json.loads(first_sweep.stdout)["actions"], first_preview["actions"])
+
+        partial_status = self.invoke("batch-status", "--batch-id", batch["batch_id"])
+        self.assertEqual(partial_status.returncode, 0, partial_status.stderr)
+        self.assertEqual(json.loads(partial_status.stdout)["batch"]["status"], "PARTIALLY_PURGED")
+        batch_events = self.invoke("batch-events", "--batch-id", batch["batch_id"])
+        self.assertEqual(batch_events.returncode, 0, batch_events.stderr)
+        self.assertEqual(
+            [event["event_type"] for event in json.loads(batch_events.stdout)["events"]],
+            ["batch-created", "batch-member-purged"],
+        )
+
+        self._advance_ready_run_to_pass(store, second_child, start_at=20)
+        self._set_updated_at(store, second_child, 0)
+        final_preview_command = self.invoke("retention-preview", "--now", str(retention_now))
+        self.assertEqual(final_preview_command.returncode, 0, final_preview_command.stderr)
+        final_preview = json.loads(final_preview_command.stdout)
+        self.assertEqual(final_preview["actions"], [{"action": "purge-run", "run_id": second_child}])
+        final_sweep = self.invoke(
+            "retention-sweep",
+            "--confirm-plan-hash",
+            final_preview["plan_hash"],
+            "--now",
+            str(retention_now),
+        )
+        self.assertEqual(final_sweep.returncode, 0, final_sweep.stderr)
+        self.assertEqual(json.loads(final_sweep.stdout)["actions"], final_preview["actions"])
+
+        removed_status = self.invoke("batch-status", "--batch-id", batch["batch_id"])
+        self.assertEqual(removed_status.returncode, 2)
+
+    def test_sqlite_rejects_direct_deletion_of_an_active_batch_child(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+        batch = json.loads(
+            self.invoke(
+                "batch-create",
+                str(self.target),
+                "--all",
+                "--expected-inventory-hash",
+                self.current_inventory_hash(),
+            ).stdout
+        )["batch"]
+        child_run_id = batch["items"][0]["child_run_id"]
+        store = StateStore(self.state_root / "state.db")
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            with store._transaction() as connection:
+                connection.execute("DELETE FROM runs WHERE run_id = ?", (child_run_id,))
+
+        self.assertEqual(store.get_batch(batch["batch_id"])["status"], "READY")
+
+    @staticmethod
+    def _set_updated_at(store: StateStore, run_id: str, updated_at: int) -> None:
+        with store._transaction() as connection:
+            connection.execute("UPDATE runs SET updated_at = ? WHERE run_id = ?", (updated_at, run_id))
+
+    @staticmethod
+    def _advance_ready_run_to_pass(store: StateStore, run_id: str, start_at: int) -> None:
+        run = store.get_run(run_id)
+        lease = store.acquire_lease(run_id, f"pass-{run_id}", now=start_at, ttl_seconds=60)
+        for offset, (next_state, next_outcome) in enumerate(
+            (
+                ("REVIEWING", "IN_PROGRESS"),
+                ("TRIAGING", "IN_PROGRESS"),
+                ("REPAIRING", "IN_PROGRESS"),
+                ("VERIFYING", "IN_PROGRESS"),
+                ("REREVIEWING", "IN_PROGRESS"),
+                ("INTEGRITY_CHECK", "IN_PROGRESS"),
+                ("PASS", "PASS"),
+            ),
+            start=1,
+        ):
+            run = store.transition(
+                run_id,
+                run["revision"],
+                lease["token"],
+                next_state,
+                next_outcome,
+                run["current_snapshot_hash"],
+                now=start_at + offset,
+            )
+        store.release_lease(run_id, lease["token"], now=start_at + 8)
 
     def write_review_result(
         self,

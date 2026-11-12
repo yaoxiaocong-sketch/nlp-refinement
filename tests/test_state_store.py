@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import multiprocessing
 import tempfile
 import unittest
 import stat
 import json
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from nlp_refinement.state_store import (
     ImmutableFieldError,
@@ -21,6 +23,26 @@ from nlp_refinement.state_store import (
 RUN_ID = "run_aaaaaaaaaaaa"
 PROJECT_KEY = "a" * 64
 SNAPSHOT = "b" * 64
+
+
+def _acquire_competing_lease(
+    database_path: str,
+    owner_session_id: str,
+    start_event: Any,
+    outcomes: Any,
+) -> None:
+    """Exercise a separate process's SQLite connection for the lease DOE."""
+    if not start_event.wait(timeout=10):
+        outcomes.put(("error", owner_session_id, "start-timeout"))
+        return
+    try:
+        StateStore(Path(database_path)).acquire_lease(RUN_ID, owner_session_id, now=1_000, ttl_seconds=60)
+    except LeaseConflict:
+        outcomes.put(("lease-conflict", owner_session_id))
+    except Exception as error:  # pragma: no cover - assertion reports unexpected worker failures
+        outcomes.put(("error", owner_session_id, type(error).__name__))
+    else:
+        outcomes.put(("acquired", owner_session_id))
 
 
 def run_payload() -> dict[str, object]:
@@ -125,6 +147,96 @@ class StateStoreTests(unittest.TestCase):
             rows = connection.execute("SELECT run_id FROM archived_runs").fetchall()
         self.assertEqual(rows, [(RUN_ID,)])
 
+    def test_initialize_rejects_a_v5_ledger_without_batch_schema_without_rewriting_it(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy-v5.db"
+        with sqlite3.connect(legacy_path) as connection:
+            connection.execute("CREATE TABLE runs (run_id TEXT PRIMARY KEY, run_json TEXT NOT NULL)")
+            connection.execute(
+                "INSERT INTO runs (run_id, run_json) VALUES (?, ?)",
+                (RUN_ID, json.dumps(run_payload(), sort_keys=True)),
+            )
+        legacy_path.chmod(0o600)
+        with self.assertRaisesRegex(RuntimeError, "lacks the Batch schema"):
+            StateStore(legacy_path).initialize()
+        with sqlite3.connect(legacy_path) as connection:
+            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        self.assertEqual(tables, {"runs"})
+
+    def test_initialize_rejects_the_retired_batch_status_schema_without_rewriting_it(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy-batch.db"
+        with sqlite3.connect(legacy_path) as connection:
+            connection.execute("CREATE TABLE runs (run_id TEXT PRIMARY KEY, run_json TEXT NOT NULL)")
+            connection.execute(
+                "INSERT INTO runs (run_id, run_json) VALUES (?, ?)",
+                (RUN_ID, json.dumps(run_payload(), sort_keys=True)),
+            )
+            connection.execute(
+                "CREATE TABLE batches (batch_id TEXT PRIMARY KEY, project_key TEXT NOT NULL, inventory_hash TEXT NOT NULL, status TEXT NOT NULL, batch_json TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE batch_items (batch_id TEXT NOT NULL, relative_path TEXT NOT NULL, snapshot_hash TEXT NOT NULL, child_run_id TEXT NOT NULL, PRIMARY KEY (batch_id, relative_path))"
+            )
+        legacy_path.chmod(0o600)
+        with self.assertRaisesRegex(RuntimeError, "current Batch manifest schema"):
+            StateStore(legacy_path).initialize()
+        with sqlite3.connect(legacy_path) as connection:
+            columns = [row[1] for row in connection.execute("PRAGMA table_info(batches)")]
+        self.assertIn("status", columns)
+
+    def test_initialize_rejects_a_retired_batch_schema_even_without_runs(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "orphaned-batch.db"
+        with sqlite3.connect(legacy_path) as connection:
+            connection.execute("CREATE TABLE batches (batch_id TEXT PRIMARY KEY, status TEXT NOT NULL)")
+            connection.execute("CREATE TABLE batch_items (batch_id TEXT NOT NULL, child_run_id TEXT NOT NULL)")
+        legacy_path.chmod(0o600)
+        with self.assertRaisesRegex(RuntimeError, "current Batch manifest schema"):
+            StateStore(legacy_path).initialize()
+
+    def test_initialize_rejects_a_batch_ledger_missing_its_event_history_without_rewriting_it(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "batch-without-events.db"
+        with sqlite3.connect(legacy_path) as connection:
+            connection.execute("CREATE TABLE runs (run_id TEXT PRIMARY KEY, run_json TEXT NOT NULL)")
+            connection.execute(
+                "INSERT INTO runs (run_id, run_json) VALUES (?, ?)",
+                (RUN_ID, json.dumps(run_payload(), sort_keys=True)),
+            )
+            connection.execute(
+                "CREATE TABLE batches (batch_id TEXT PRIMARY KEY, project_key TEXT NOT NULL, inventory_hash TEXT NOT NULL, selected_count INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE batch_items (batch_id TEXT NOT NULL, relative_path TEXT NOT NULL, snapshot_hash TEXT NOT NULL, child_run_id TEXT, member_status TEXT NOT NULL, purged_at INTEGER, PRIMARY KEY (batch_id, relative_path), UNIQUE (child_run_id))"
+            )
+        legacy_path.chmod(0o600)
+
+        with self.assertRaisesRegex(RuntimeError, "current Batch manifest schema"):
+            StateStore(legacy_path).initialize()
+
+        with sqlite3.connect(legacy_path) as connection:
+            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        self.assertNotIn("batch_events", tables)
+
+    def test_batch_status_derivation_preserves_terminal_and_user_decision_meaning(self) -> None:
+        self.assertEqual(
+            StateStore._derived_batch_status([{"state": "READY", "outcome": "IN_PROGRESS"}]),
+            "READY",
+        )
+        self.assertEqual(
+            StateStore._derived_batch_status([{"state": "REVIEWING", "outcome": "IN_PROGRESS"}]),
+            "DISPATCHING",
+        )
+        self.assertEqual(
+            StateStore._derived_batch_status([{"state": "NEEDS_USER_DECISION", "outcome": "NEEDS_USER_DECISION"}]),
+            "NEEDS_USER_DECISION",
+        )
+        self.assertEqual(
+            StateStore._derived_batch_status([{"state": "PASS", "outcome": "PASS"}]),
+            "COMPLETE",
+        )
+        self.assertEqual(
+            StateStore._derived_batch_status([{"state": "SNAPSHOT_STALE", "outcome": "SNAPSHOT_STALE"}]),
+            "PARTIAL",
+        )
+
     def test_database_directory_and_file_are_owner_only(self) -> None:
         self.assertEqual(stat.S_IMODE(self.store.database_path.parent.stat().st_mode), 0o700)
         self.assertEqual(stat.S_IMODE(self.store.database_path.stat().st_mode), 0o600)
@@ -149,6 +261,48 @@ class StateStoreTests(unittest.TestCase):
         replacement = self.store.acquire_lease(RUN_ID, "session-b", now=1_061, ttl_seconds=60)
         self.assertNotEqual(first["token"], replacement["token"])
         self.assertEqual(replacement["owner_session_id"], "session-b")
+
+    def test_multiprocess_lease_contention_has_one_winner_and_no_sqlite_lock_error(self) -> None:
+        context = multiprocessing.get_context("spawn")
+        start_event = context.Event()
+        outcomes = context.Queue()
+        owners = [f"concurrent-owner-{index}" for index in range(4)]
+        workers = [
+            context.Process(
+                target=_acquire_competing_lease,
+                args=(str(self.store.database_path), owner, start_event, outcomes),
+            )
+            for owner in owners
+        ]
+        try:
+            for worker in workers:
+                worker.start()
+            start_event.set()
+            for worker in workers:
+                worker.join(timeout=10)
+                self.assertEqual(worker.exitcode, 0, f"worker did not complete: pid={worker.pid}, exitcode={worker.exitcode}")
+
+            results = [outcomes.get(timeout=5) for _ in workers]
+            acquired = [result[1] for result in results if result[0] == "acquired"]
+            conflicts = [result[1] for result in results if result[0] == "lease-conflict"]
+            unexpected = [result for result in results if result[0] == "error"]
+            self.assertEqual(unexpected, [])
+            self.assertEqual(len(acquired), 1)
+            self.assertEqual(set(acquired + conflicts), set(owners))
+
+            with self.store._connection() as connection:
+                lease = connection.execute(
+                    "SELECT owner_session_id FROM leases WHERE run_id = ?", (RUN_ID,)
+                ).fetchone()
+            self.assertIsNotNone(lease)
+            self.assertEqual(lease["owner_session_id"], acquired[0])
+        finally:
+            for worker in workers:
+                if worker.pid is None:
+                    continue
+                if worker.is_alive():
+                    worker.terminate()
+                worker.join()
 
     def test_artifact_ids_are_monotonic_and_append_advances_revision(self) -> None:
         lease = self.acquire()

@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from nlp_refinement.artifact_inventory import scan_artifact_inventory
 from nlp_refinement.patch_proposal_adapter import ingest_patch_proposal, load_patch_proposal
 from nlp_refinement.host_execution_request import HostExecutionRequest
 from nlp_refinement.review_adapter import ingest_review, load_review_result
@@ -75,6 +76,23 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--redacted-brief-file", type=Path, required=True)
     start.add_argument("--snapshot-hash", required=True)
     start.add_argument("--project-id", help="stable user-managed identity for a moved project")
+
+    scan = subcommands.add_parser("scan", help="list candidate NL artifacts without creating a run")
+    scan.add_argument("root", type=Path)
+    batch = subcommands.add_parser("batch-create", help="create review-ready child runs from an inventory")
+    batch.add_argument("root", type=Path)
+    batch.add_argument(
+        "--expected-inventory-hash",
+        required=True,
+        help="inventory_hash returned by the scan that the user selected from",
+    )
+    selection = batch.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--all", action="store_true")
+    selection.add_argument("--select", action="append", metavar="RELATIVE_PATH")
+    batch_status = subcommands.add_parser("batch-status", help="read one batch and its child-run states")
+    batch_status.add_argument("--batch-id", required=True)
+    batch_events = subcommands.add_parser("batch-events", help="read one batch's content-free audit events")
+    batch_events.add_argument("--batch-id", required=True)
 
     status = subcommands.add_parser("status", help="read a run without changing it")
     status.add_argument("--run-id", required=True)
@@ -190,6 +208,69 @@ def start(args: argparse.Namespace, store: StateStore) -> int:
     result = public_status(ready, len(store.list_events(run_id)))
     result.update({"command": "start", "identity_mode": identity_mode, "next_action": "submit M3 review result"})
     output(result)
+    return 0
+
+
+def scan(args: argparse.Namespace) -> int:
+    inventory = scan_artifact_inventory(args.root)
+    output({"command": "scan", "root": str(args.root.resolve(strict=True)), "inventory": inventory})
+    return 0
+
+
+def batch_create(args: argparse.Namespace, store: StateStore) -> int:
+    expected_inventory_hash = snapshot_hash(args.expected_inventory_hash)
+    inventory = scan_artifact_inventory(args.root)
+    observed_inventory_hash = inventory["inventory_hash"]
+    if expected_inventory_hash != observed_inventory_hash:
+        output(
+            {
+                "command": "batch-create",
+                "disposition": "INVENTORY_STALE",
+                "expected_inventory_hash": expected_inventory_hash,
+                "observed_inventory_hash": observed_inventory_hash,
+                "no_model_call_attestation": True,
+                "no_target_write_attestation": True,
+            }
+        )
+        return 0
+    candidates = inventory["candidates"]
+    requested = {candidate["relative_path"] for candidate in candidates} if args.all else set(args.select or [])
+    selected = [candidate for candidate in candidates if candidate["relative_path"] in requested]
+    if not selected or requested != {candidate["relative_path"] for candidate in selected}:
+        raise ValueError("batch selection must name one or more current candidate relative paths")
+    identity, identity_mode = project_identity(args.root, None)
+    key = project_key(identity)
+    batch_id = f"batch_{secrets.token_hex(12)}"
+    children: list[tuple[dict[str, Any], dict[str, Any], str]] = []
+    for candidate in selected:
+        run_id = f"run_{secrets.token_hex(12)}"
+        snapshot = str(candidate["sha256"])
+        run = {"schema_version": "5.0", "run_id": run_id, "project_key": key, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "5.0"}
+        anchor = {"batch_id": batch_id, "relative_path": candidate["relative_path"], "project_identity": identity, "identity_mode": identity_mode, "review_intent": "system-default-nl-artifact-review"}
+        children.append((run, anchor, str(candidate["relative_path"])))
+    store.initialize()
+    result = store.create_batch_with_ready_children(
+        {"batch_id": batch_id, "project_key": key, "inventory_hash": inventory["inventory_hash"]},
+        children,
+        now=now_epoch(),
+    )
+    output({"command": "batch-create", "batch": result, "no_model_call_attestation": True, "no_target_write_attestation": True})
+    return 0
+
+
+def batch_status(args: argparse.Namespace, store: StateStore) -> int:
+    output({"command": "batch-status", "batch": store.get_batch(args.batch_id)})
+    return 0
+
+
+def batch_events(args: argparse.Namespace, store: StateStore) -> int:
+    output(
+        {
+            "command": "batch-events",
+            "batch_id": args.batch_id,
+            "events": store.list_batch_events(args.batch_id),
+        }
+    )
     return 0
 
 
@@ -341,7 +422,19 @@ def retention_sweep(args: argparse.Namespace, store: StateStore) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "scan":
+        try:
+            return scan(args)
+        except (OSError, ValueError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
     store = StateStore(args.state_root / "state.db")
+    if args.command == "batch-create":
+        try:
+            return batch_create(args, store)
+        except (KeyError, OSError, StateStoreError, ValueError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
     if args.command == "retention-preview" and not store.database_path.exists():
         now = args.now if args.now is not None else now_epoch()
         output({"command": "retention-preview", **store.empty_retention_preview(now)})
@@ -350,6 +443,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "start":
             return start(args, store)
+        if args.command == "batch-status":
+            return batch_status(args, store)
+        if args.command == "batch-events":
+            return batch_events(args, store)
         if args.command == "status":
             return status(args, store)
         if args.command == "resume":

@@ -108,6 +108,7 @@ class M8DoeAndSkillEntryTests(unittest.TestCase):
         self.assertTrue(skill.is_file())
         self.assertFalse((ROOT / "skills" / "refine").exists())
         self.assertIn("name: nlp-refine", skill.read_text(encoding="utf-8"))
+        self.assertIn("nlp-refinement scan <project-root>", skill.read_text(encoding="utf-8"))
 
         for path in [
             skill,

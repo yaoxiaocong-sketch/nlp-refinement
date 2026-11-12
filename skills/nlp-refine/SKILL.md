@@ -14,7 +14,54 @@ That flow may install only after it has shown a hash-pinned plan and received an
 explicit confirmation. Never fall back to `python3 -m`, `PYTHONPATH`, a source
 checkout, or a guessed plugin-cache path.
 
-## Core boundary
+## Project scan preview
+
+When the user asks to review a project or a directory, first run the read-only
+inventory command for the selected project root:
+
+```sh
+nlp-refinement scan <project-root>
+```
+
+The result is a deterministic candidate list for Markdown, JSON, TOML, and
+YAML files. It includes a SHA-256 per candidate and explicit exclusion reasons
+without printing artifact contents. Invalid JSON or TOML remains a candidate
+with `format_status: invalid`; YAML is a candidate with
+`format_status: unvalidated`, not a claim that its syntax was checked.
+
+Do not call a model, create a run, initialize the SQLite ledger, or modify a
+target while scanning. Present the candidate count and exclusions, then wait
+for the user to select all candidates or a subset. Batch creation and any host
+review remain separate capabilities; do not imply that scan performed a review.
+
+After the user explicitly selects all candidates or a subset, copy the
+`inventory_hash` from that exact scan result and create only the review-ready
+Batch and child runs. For all candidates use:
+
+```sh
+nlp-refinement batch-create <project-root> --all \
+  --expected-inventory-hash <inventory_hash-from-scan>
+```
+
+For a subset, pass each selected inventory `relative_path` as a separate
+`--select` value and retain the same `--expected-inventory-hash`. The command
+rescans before creating its ledger entries. If the inventory has changed, it
+returns `INVENTORY_STALE` with the expected and observed hashes and creates no
+Batch or child run; rescan and ask the user to make a fresh selection.
+`batch-create` creates no model call and no target write.
+`batch-status --batch-id <batch-id>` derives its status from active child runs;
+it does not persist an independent parent workflow state. If retention has
+purged some child runs, it reports `PARTIALLY_PURGED` with explicit active and
+purged counts. Once retention purges the last child, the content-free Batch
+manifest and its events are removed with it.
+
+To inspect the retained, content-free Batch audit trail without changing it:
+
+```sh
+nlp-refinement batch-events --batch-id <batch-id>
+```
+
+## Single-artifact core boundary
 
 The local command adapter starts review-only runs:
 

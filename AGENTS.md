@@ -26,6 +26,12 @@ technical identifier is `nlp-refinement-cli`.
   probes. It is not a target-worktree writer or repair adapter.
 - `nlp_refinement/patch_proposal_adapter.py` records untrusted, human-only M5
   diff proposals as review evidence. It never resolves or accesses a target.
+- The `nlp-review-propose` Skill is a TUI-native procedure: a root may create
+  distinct reviewer and proposer child contexts only in sequence, after ledger
+  validation. `nlp_refinement/tui_workflow.py` owns only selection parsing,
+  project-scoped recovery facts, snapshot checks, and ProposalHandoff building;
+  it does not create children, start an app-server, or write a target. Child
+  role configuration is not proof of per-child OS sandbox isolation.
 - `fixtures/v5/` contains executable examples of terminal outcomes and safety
   cases.
 - `scripts/validate_m0_contract.py` validates the supported JSON Schema subset,

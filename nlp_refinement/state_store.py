@@ -475,6 +475,17 @@ class StateStore:
             },
         }
 
+    def list_batches_for_project(self, project_key: str) -> list[dict[str, Any]]:
+        """Read retained Batches for one project without changing ledger state."""
+        if re.fullmatch(r"[a-f0-9]{64}", project_key) is None:
+            raise ValueError("project key is invalid")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT batch_id FROM batches WHERE project_key = ? ORDER BY updated_at DESC, batch_id DESC",
+                (project_key,),
+            ).fetchall()
+        return [self.get_batch(str(row["batch_id"])) for row in rows]
+
     def list_batch_events(self, batch_id: str) -> list[dict[str, Any]]:
         """Return the content-free audit events for one retained Batch."""
         with self._connection() as connection:

@@ -17,10 +17,11 @@ from nlp_refinement.state_store import StateStore
 
 HASH = re.compile(r"[a-f0-9]{64}")
 HUNK_HEADER = re.compile(r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? \+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@(?: .*)?$")
-REQUIRED_RESULT = {
+REQUIRED_RESULT_V5 = {
     "schema_version", "phase_name", "proposer_id", "summary",
     "base_snapshot_hash", "no_target_write_attestation", "proposals",
 }
+REQUIRED_RESULT_V6 = REQUIRED_RESULT_V5 | {"review_artifact_id"}
 REQUIRED_PROPOSAL = {
     "finding_id", "target_reference", "unified_diff", "rationale", "target_invariants",
     "causal_claim", "causal_evidence_refs", "authorization_basis", "verification_plan",
@@ -173,13 +174,17 @@ def _validate_assessment(value: Any, proposer_id: str) -> None:
 
 
 def validate_patch_proposal(result: dict[str, Any]) -> None:
-    if set(result) != REQUIRED_RESULT:
+    version = result.get("schema_version")
+    required = REQUIRED_RESULT_V5 if version == "5.0" else REQUIRED_RESULT_V6 if version == "6.0" else None
+    if required is None or set(result) != required:
         raise PatchProposalInputError("patch proposal has unexpected or missing fields")
-    if result["schema_version"] != "5.0" or result["phase_name"] != "patch-proposal":
+    if result["phase_name"] != "patch-proposal":
         raise PatchProposalInputError("patch proposal has an unsupported schema or phase")
     for field in ("proposer_id", "summary", "base_snapshot_hash"):
         if not isinstance(result[field], str) or not result[field].strip():
             raise PatchProposalInputError(f"patch proposal {field} must be a non-empty string")
+    if version == "6.0" and (not isinstance(result["review_artifact_id"], str) or not result["review_artifact_id"].strip()):
+        raise PatchProposalInputError("v6 patch proposal review_artifact_id must be a non-empty string")
     if HASH.fullmatch(result["base_snapshot_hash"]) is None:
         raise PatchProposalInputError("patch proposal base_snapshot_hash must be lowercase SHA-256 hex")
     if result["no_target_write_attestation"] is not True:
@@ -203,6 +208,12 @@ def validate_patch_proposal(result: dict[str, Any]) -> None:
             ):
                 raise PatchProposalInputError(f"patch proposal {field} must be a non-empty string array")
         _validate_assessment(proposal["assessment"], result["proposer_id"])
+        if version == "6.0":
+            review_artifact_id = result["review_artifact_id"]
+            if set(proposal["causal_evidence_refs"]) != {review_artifact_id}:
+                raise PatchProposalInputError("v6 proposal causal evidence must bind exactly the review artifact")
+            if set(proposal["assessment"]["evidence_refs"]) != {review_artifact_id}:
+                raise PatchProposalInputError("v6 proposal assessment evidence must bind exactly the review artifact")
         if proposal["finding_id"] in finding_ids:
             raise PatchProposalInputError("patch proposal may contain one item per finding")
         finding_ids.add(proposal["finding_id"])
@@ -264,6 +275,8 @@ def ingest_patch_proposal(
                 raise PatchProposalInputError("proposal assessment evidence must reference linked finding evidence")
             if proposal["assessment"]["recommendation"] == "recommend" and run["open_high_risk_assumptions"]:
                 raise PatchProposalInputError("cannot recommend a proposal while high-risk assumptions remain open")
+            if proposal_result["schema_version"] == "6.0" and proposal_result["review_artifact_id"] not in permitted_evidence:
+                raise PatchProposalInputError("v6 patch proposal review artifact is not evidence for the linked finding")
 
         source_refs = sorted({
             reference

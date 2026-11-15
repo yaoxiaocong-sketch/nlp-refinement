@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-_EXPECTED_CONTRACT_IDS = {"review-result/v5", "patch-proposal-result/v5"}
+_EXPECTED_CONTRACT_IDS = {"review-result/v5", "patch-proposal-result/v5", "patch-proposal-result/v6"}
 _VALID_OWNERS = {"review_adapter", "patch_proposal_adapter"}
 
 

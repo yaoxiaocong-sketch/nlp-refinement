@@ -118,6 +118,52 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(inspected.returncode, 0, inspected.stderr)
         self.assertEqual(json.loads(inspected.stdout)["batch"], batch)
 
+    def test_tui_resume_candidates_is_project_scoped_and_read_only(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+
+        queried = self.invoke("tui-resume-candidates", str(self.target))
+
+        self.assertEqual(queried.returncode, 0, queried.stderr)
+        rendered = json.loads(queried.stdout)
+        self.assertEqual(rendered["command"], "tui-resume-candidates")
+        self.assertEqual(len(rendered["batches"]), 1)
+        self.assertTrue(rendered["no_model_call_attestation"])
+        self.assertTrue(rendered["no_target_write_attestation"])
+
+    def test_tui_proposal_handoff_uses_accepted_review_and_current_batch_snapshot(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        batch = json.loads(created.stdout)["batch"]
+        item = batch["items"][0]
+        reviewed = self.review(
+            str(item["child_run_id"]),
+            self.write_review_result(),
+            observed_snapshot=str(item["snapshot_hash"]),
+        )
+        self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
+        review_artifact_id = json.loads(reviewed.stdout)["review_artifact_id"]
+
+        handoff = self.invoke(
+            "tui-proposal-handoff", str(self.target), "--run-id", str(item["child_run_id"]),
+        )
+
+        self.assertEqual(handoff.returncode, 0, handoff.stderr)
+        rendered = json.loads(handoff.stdout)
+        proposal_handoff = rendered["proposal_handoff"]
+        self.assertEqual(proposal_handoff["review_artifact_id"], review_artifact_id)
+        self.assertEqual(proposal_handoff["snapshot_hash"], item["snapshot_hash"])
+        self.assertEqual(proposal_handoff["artifact_model_view"], "# rules\n")
+        self.assertTrue(rendered["no_model_call_attestation"])
+        self.assertTrue(rendered["no_target_write_attestation"])
+
     def test_batch_create_requires_a_confirmed_inventory_hash_before_initializing_a_ledger(self) -> None:
         (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
 

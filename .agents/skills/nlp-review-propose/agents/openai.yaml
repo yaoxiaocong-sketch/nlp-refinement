@@ -1,0 +1,6 @@
+interface:
+  display_name: "NLP Review Propose"
+  short_description: "Run a human-only native review-to-proposal workflow."
+  default_prompt: "$nlp-review-propose start"
+policy:
+  allow_implicit_invocation: false

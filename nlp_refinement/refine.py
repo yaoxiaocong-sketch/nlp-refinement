@@ -93,6 +93,23 @@ def build_parser() -> argparse.ArgumentParser:
     batch_status.add_argument("--batch-id", required=True)
     batch_events = subcommands.add_parser("batch-events", help="read one batch's content-free audit events")
     batch_events.add_argument("--batch-id", required=True)
+    tui_batches = subcommands.add_parser(
+        "tui-resume-candidates",
+        help="read project-scoped resumable Batches for the native TUI workflow",
+    )
+    tui_batches.add_argument("root", type=Path)
+    tui_disposition = subcommands.add_parser(
+        "tui-workflow-disposition",
+        help="derive the native TUI workflow disposition for one current-project run",
+    )
+    tui_disposition.add_argument("root", type=Path)
+    tui_disposition.add_argument("--run-id", required=True)
+    tui_handoff = subcommands.add_parser(
+        "tui-proposal-handoff",
+        help="build a snapshot-bound proposer handoff from accepted ledger facts",
+    )
+    tui_handoff.add_argument("root", type=Path)
+    tui_handoff.add_argument("--run-id", required=True)
 
     status = subcommands.add_parser("status", help="read a run without changing it")
     status.add_argument("--run-id", required=True)
@@ -274,6 +291,54 @@ def batch_events(args: argparse.Namespace, store: StateStore) -> int:
     return 0
 
 
+def tui_resume_candidates(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import find_resumable_batches
+
+    batch_ids = find_resumable_batches(store, args.root)
+    output(
+        {
+            "command": "tui-resume-candidates",
+            "batches": [store.get_batch(batch_id) for batch_id in batch_ids],
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def tui_workflow_disposition(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import _batch_item_for_run, workflow_disposition
+
+    run = store.get_run(args.run_id)
+    _batch_item_for_run(store, args.root, args.run_id)
+    output(
+        {
+            "command": "tui-workflow-disposition",
+            "run_id": args.run_id,
+            "disposition": workflow_disposition(
+                run, store.list_findings(args.run_id), store.list_artifacts(args.run_id)
+            ),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def tui_proposal_handoff(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import build_proposal_handoff
+
+    output(
+        {
+            "command": "tui-proposal-handoff",
+            "proposal_handoff": build_proposal_handoff(store, args.root, args.run_id),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
 def status(args: argparse.Namespace, store: StateStore) -> int:
     run = store.get_run(args.run_id)
     result = public_status(run, len(store.list_events(args.run_id)))
@@ -447,6 +512,12 @@ def main(argv: list[str] | None = None) -> int:
             return batch_status(args, store)
         if args.command == "batch-events":
             return batch_events(args, store)
+        if args.command == "tui-resume-candidates":
+            return tui_resume_candidates(args, store)
+        if args.command == "tui-workflow-disposition":
+            return tui_workflow_disposition(args, store)
+        if args.command == "tui-proposal-handoff":
+            return tui_proposal_handoff(args, store)
         if args.command == "status":
             return status(args, store)
         if args.command == "resume":

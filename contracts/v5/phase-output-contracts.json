@@ -26,6 +26,15 @@
         {"rule_id": "proposal.unified-diff.v1", "owner": "patch_proposal_adapter", "prompt_requirement": "A unified_diff must end with a newline, use paired --- and +++ file headers, and use valid @@ hunk headers.", "negative_case_ids": ["proposal-missing-final-newline", "proposal-malformed-hunk", "proposal-orphan-no-newline-marker"]},
         {"rule_id": "proposal.assessment.v1", "owner": "patch_proposal_adapter", "prompt_requirement": "The assessment score total must equal the sum of its scorecard dimensions.", "negative_case_ids": ["proposal-total-score-mismatch"]}
       ]
+    },
+    {
+      "contract_id": "patch-proposal-result/v6",
+      "schema_path": "nlp_refinement/resources/schemas/v6/patch-proposal-result.schema.json",
+      "prompt_path": "nlp_refinement/resources/prompts/patch-proposal-phase.v6.md",
+      "valid_fixture_path": "fixtures/v6/patch-proposal-result.json",
+      "semantic_rules": [
+        {"rule_id": "proposal.review-artifact-binding.v6", "owner": "patch_proposal_adapter", "prompt_requirement": "Set review_artifact_id to the supplied accepted review artifact ID and use exactly that ID in each causal_evidence_refs and assessment evidence_refs array.", "negative_case_ids": ["proposal-v6-review-artifact-mismatch"]}
+      ]
     }
   ]
 }

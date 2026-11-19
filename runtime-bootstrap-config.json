@@ -1,10 +1,10 @@
 {
   "schema_version": "nlp-refinement-runtime-bootstrap/v1",
   "plugin_name": "nlp-refinement-cli",
-  "plugin_version": "0.9.4",
+  "plugin_version": "0.10.0",
   "release_manifest": {
-    "url": "https://github.com/yaoxiaocong-sketch/nlp-refinement/releases/download/v0.9.4/nlp-refinement-runtime-0.9.4.json",
-    "sha256": "83b1951464afa63ce027d82995b7415d48edeb130dde02ab8d784d4218e31576",
-    "source_path": "releases/nlp-refinement-runtime-0.9.4.json"
+    "url": "https://github.com/yaoxiaocong-sketch/nlp-refinement/releases/download/v0.10.0/nlp-refinement-runtime-0.10.0.json",
+    "sha256": "24b37bd3076bc972f40eee4615756adbd373cbd7aaf4340d442600cb3983cb69",
+    "source_path": "releases/nlp-refinement-runtime-0.10.0.json"
   }
 }

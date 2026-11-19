@@ -108,6 +108,11 @@ RUN_STATES = {
     "NO_MATERIAL_DELTA", "BLOCKED", "CANCELLED",
 }
 RUN_OUTCOMES = {"IN_PROGRESS"} | TERMINAL_OUTCOMES
+TUI_CHILD_ROLES = {"reviewer", "proposer", "proposal-assessor"}
+TUI_CHILD_DISPATCH_RECEIPT_FIELDS = {
+    "receipt_schema", "role", "child_thread_id", "contract_sha256", "prompt_sha256",
+    "prompt_utf8_bytes", "observed_cwd", "host_role_binding", "child_sandbox",
+}
 
 
 def validate_finding_classification(subject_kind: str, evidence_plane: str, category: str) -> None:
@@ -483,6 +488,24 @@ class StateStore:
             rows = connection.execute(
                 "SELECT batch_id FROM batches WHERE project_key = ? ORDER BY updated_at DESC, batch_id DESC",
                 (project_key,),
+            ).fetchall()
+        return [self.get_batch(str(row["batch_id"])) for row in rows]
+
+    def list_batches_with_active_children(self) -> list[dict[str, Any]]:
+        """Read every retained Batch that still has an active child run.
+
+        This is intentionally a ledger-only query.  Callers must validate any
+        immutable-anchor location before treating it as a target project root.
+        """
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT DISTINCT b.batch_id
+                FROM batches b
+                JOIN batch_items i ON i.batch_id = b.batch_id
+                WHERE i.member_status = 'ACTIVE'
+                ORDER BY b.updated_at DESC, b.batch_id DESC
+                """
             ).fetchall()
         return [self.get_batch(str(row["batch_id"])) for row in rows]
 
@@ -894,6 +917,35 @@ class StateStore:
             for row in rows
         ]
 
+    def record_tui_child_dispatch_receipt(
+        self, run_id: str, receipt: dict[str, Any], now: int,
+    ) -> dict[str, Any]:
+        """Persist one bounded root-attested TUI child-dispatch receipt."""
+        normalized = self._validate_tui_child_dispatch_receipt(receipt)
+        with self._transaction() as connection:
+            run = self._require_run(connection, run_id)
+            if run["state"] in FINAL_STATES:
+                raise InvalidTransition("cannot record a child dispatch receipt for a final run")
+            prior_rows = connection.execute(
+                "SELECT payload_json FROM events WHERE run_id = ? AND event_type = ?",
+                (run_id, "tui-child-dispatch-receipt"),
+            ).fetchall()
+            if any(json.loads(row["payload_json"])["role"] == normalized["role"] for row in prior_rows):
+                raise ValueError("a child dispatch receipt for this role already exists")
+            updated = self._write_run(connection, run, now)
+            self._record_event(
+                connection, run_id, updated["revision"], "tui-child-dispatch-receipt", normalized, now,
+            )
+        return normalized
+
+    def list_tui_child_dispatch_receipts(self, run_id: str) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM events WHERE run_id = ? AND event_type = ? ORDER BY sequence",
+                (run_id, "tui-child-dispatch-receipt"),
+            ).fetchall()
+        return [json.loads(row["payload_json"]) for row in rows]
+
     def list_findings(self, run_id: str) -> list[dict[str, Any]]:
         with self._connection() as connection:
             rows = connection.execute(
@@ -1186,6 +1238,27 @@ class StateStore:
             raise ValueError("repair_cycle_count exceeds max_repair_cycles")
         if run["state"] != "DRAFT" or run["outcome"] != "IN_PROGRESS" or run["revision"] != 0:
             raise ValueError("a new run must start at DRAFT revision 0 with IN_PROGRESS outcome")
+
+    @staticmethod
+    def _validate_tui_child_dispatch_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
+        if set(receipt) != TUI_CHILD_DISPATCH_RECEIPT_FIELDS:
+            raise ValueError("tui child dispatch receipt has unexpected fields")
+        if receipt["receipt_schema"] != "tui-child-dispatch-receipt/v1":
+            raise ValueError("tui child dispatch receipt schema is invalid")
+        if receipt["role"] not in TUI_CHILD_ROLES:
+            raise ValueError("tui child dispatch receipt role is invalid")
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", str(receipt["child_thread_id"])) is None:
+            raise ValueError("tui child dispatch receipt thread ID is invalid")
+        for field in ("contract_sha256", "prompt_sha256"):
+            if re.fullmatch(r"[a-f0-9]{64}", str(receipt[field])) is None:
+                raise ValueError(f"tui child dispatch receipt {field} is invalid")
+        byte_count = receipt["prompt_utf8_bytes"]
+        if not isinstance(byte_count, int) or isinstance(byte_count, bool) or not 1 <= byte_count <= 1_000:
+            raise ValueError("tui child dispatch receipt prompt_utf8_bytes is invalid")
+        for field in ("observed_cwd", "host_role_binding", "child_sandbox"):
+            if receipt[field] != "unverified":
+                raise ValueError(f"tui child dispatch receipt {field} must be unverified")
+        return dict(receipt)
 
     @staticmethod
     def _require_artifact_refs(connection: sqlite3.Connection, run_id: str, refs: list[str]) -> None:

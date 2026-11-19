@@ -110,7 +110,8 @@ def _validate_hunk(lines: list[str], start: int) -> int:
     return index
 
 
-def _validate_unified_diff(value: str) -> None:
+def validate_unified_diff(value: str) -> None:
+    """Validate patch syntax without opening or applying its target path."""
     encoded = value.encode("utf-8")
     if len(encoded) > MAX_DIFF_BYTES:
         raise PatchProposalInputError("unified_diff exceeds the 64 KiB proposal limit")
@@ -218,7 +219,7 @@ def validate_patch_proposal(result: dict[str, Any]) -> None:
             raise PatchProposalInputError("patch proposal may contain one item per finding")
         finding_ids.add(proposal["finding_id"])
         _validate_target_reference(proposal["target_reference"])
-        _validate_unified_diff(proposal["unified_diff"])
+        validate_unified_diff(proposal["unified_diff"])
 
 
 def ingest_patch_proposal(

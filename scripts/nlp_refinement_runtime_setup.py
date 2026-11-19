@@ -103,13 +103,26 @@ def run(*, plugin_root: Path, apply: bool) -> dict[str, object]:
     manifest, release_manifest_url, release_manifest_sha256 = configuration
     commands = tuple(bootstrap.REQUIRED_COMMANDS)
     observed_versions = {command: _command_version(command) for command in commands}
-    if all(version == CLI_VERSION for version in observed_versions.values()):
+    executable = shutil.which("nlp-refinement")
+    identity_matches = False
+    if executable is not None:
+        try:
+            identity = bootstrap._read_runtime_identity(Path(executable))
+            identity_matches = bootstrap._identity_is_compatible(
+                identity,
+                executable=Path(executable),
+                version=CLI_VERSION,
+            )
+        except Exception:
+            identity_matches = False
+    if all(version == CLI_VERSION for version in observed_versions.values()) and identity_matches:
         return {
             "status": "ALREADY_INSTALLED",
             "cli_version": CLI_VERSION,
             "plugin_version": CLI_VERSION,
             "commands": list(commands),
-            "completed_stages": ["commands-visible"],
+            "interface_version": bootstrap.TUI_NATIVE_INTERFACE,
+            "completed_stages": ["commands-visible", "runtime-interface-verified"],
         }
     result = bootstrap.run(
         release_manifest_url=release_manifest_url,

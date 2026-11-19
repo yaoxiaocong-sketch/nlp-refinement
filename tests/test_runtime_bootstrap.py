@@ -31,7 +31,7 @@ class RuntimeBootstrapTests(unittest.TestCase):
         self.wheel_bytes = self.make_wheel("0.9.0")
         self.wheel_sha256 = hashlib.sha256(self.wheel_bytes).hexdigest()
         self.release = {
-            "schema_version": "nlp-refinement-runtime-release/v1",
+            "schema_version": "nlp-refinement-runtime-release/v2",
             "package_name": "nlp-refinement-cli",
             "version": "0.9.0",
             "requires_python": ">=3.11",
@@ -46,6 +46,10 @@ class RuntimeBootstrapTests(unittest.TestCase):
                 "nlp-refinement-host",
                 "nlp-refinement-doe-prune",
             ],
+            "tui_native_capability": {
+                "interface_version": "nlp-refinement-tui-native/v1",
+                "required_subcommands": list(self.module.TUI_NATIVE_SUBCOMMANDS),
+            },
         }
 
     @staticmethod
@@ -71,6 +75,18 @@ class RuntimeBootstrapTests(unittest.TestCase):
             (script_dir / command).write_text("fixture", encoding="utf-8")
         return script_dir
 
+    def compatible_identity(self, script_dir: Path) -> dict[str, object]:
+        return {
+            "schema_version": "nlp-refinement-runtime-identity/v1",
+            "distribution_name": "nlp-refinement-cli",
+            "distribution_version": "0.9.0",
+            "interface_version": "nlp-refinement-tui-native/v1",
+            "commands": list(self.module.TUI_NATIVE_SUBCOMMANDS),
+            "executable": str(script_dir / "nlp-refinement"),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+
     def test_plan_verifies_pinned_manifest_and_never_invokes_pip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -92,6 +108,26 @@ class RuntimeBootstrapTests(unittest.TestCase):
         self.assertEqual(result["status"], "PLAN_READY")
         self.assertEqual(result["cli_version"], "0.9.0")
         self.assertEqual(commands, [])
+
+    def test_plan_rejects_a_manifest_without_the_tui_native_interface(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_plugin_manifest(root)
+            legacy_release = dict(self.release)
+            legacy_release["schema_version"] = "nlp-refinement-runtime-release/v1"
+            legacy_release.pop("tui_native_capability")
+            release_bytes = json.dumps(legacy_release, sort_keys=True).encode("utf-8")
+
+            result = self.module.run(
+                release_manifest_url="https://publisher.example.invalid/releases/0.9.0.json",
+                release_manifest_sha256=hashlib.sha256(release_bytes).hexdigest(),
+                plugin_manifest=manifest,
+                apply=False,
+                download=lambda url, limit: release_bytes,
+            )
+
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["code"], "RELEASE_MANIFEST_INCOMPATIBLE")
 
     def test_apply_refuses_a_release_manifest_with_the_wrong_pinned_hash(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -133,6 +169,7 @@ class RuntimeBootstrapTests(unittest.TestCase):
                     apply=True,
                     download=download,
                     run_command=lambda command: commands.append(command),
+                    read_runtime_identity=lambda executable: self.compatible_identity(script_dir),
                     script_dir=script_dir,
                 )
 
@@ -160,11 +197,34 @@ class RuntimeBootstrapTests(unittest.TestCase):
                     apply=True,
                     download=lambda url, limit: release_bytes if url.endswith(".json") else self.wheel_bytes,
                     run_command=lambda command: commands.append(command),
+                    read_runtime_identity=lambda executable: self.compatible_identity(script_dir),
                     script_dir=script_dir,
                 )
 
         self.assertEqual(result["status"], "INSTALLED")
         self.assertEqual(Path(commands[0][-1]).name, "nlp_refinement_cli-0.9.0-py3-none-any.whl")
+
+    def test_apply_rejects_an_installed_cli_without_the_required_interface(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_plugin_manifest(root)
+            script_dir = self.write_script_dir(root)
+            release_bytes = json.dumps(self.release, sort_keys=True).encode("utf-8")
+
+            with patch.object(self.module.shutil, "which", side_effect=lambda name: str(script_dir / name)):
+                result = self.module.run(
+                    release_manifest_url="https://publisher.example.invalid/releases/0.9.0.json",
+                    release_manifest_sha256=hashlib.sha256(release_bytes).hexdigest(),
+                    plugin_manifest=manifest,
+                    apply=True,
+                    download=lambda url, limit: release_bytes if url.endswith(".json") else self.wheel_bytes,
+                    run_command=lambda command: None,
+                    read_runtime_identity=lambda executable: {"schema_version": "nlp-refinement-runtime-identity/v1"},
+                    script_dir=script_dir,
+                )
+
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["code"], "CLI_INTERFACE_MISMATCH")
 
     def test_apply_stops_after_wheel_hash_mismatch_before_pip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

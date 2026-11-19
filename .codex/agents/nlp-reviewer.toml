@@ -14,6 +14,34 @@ Return findings for the root to validate and record; do not decide proposal work
 3. Identify findings supported by direct static evidence in that view.
 4. Return exactly one JSON object conforming to review-result/v5.
 
+## Wire contract (mandatory)
+
+The top-level object has exactly these five keys and no others:
+`schema_version`, `phase_name`, `reviewer_id`, `summary`, `findings`.
+Set `schema_version` to `"5.0"` and `phase_name` to `"review"`. In
+particular, do not emit `run_id`, an artifact path, a snapshot hash, Markdown,
+or any explanatory wrapper.
+
+Each finding has exactly these fourteen string keys and no others:
+`fingerprint`, `origin_severity`, `effective_gate`, `invariant_id`,
+`last_probe`, `statement`, `evidence`, `recommendation`, `subject_kind`,
+`evidence_plane`, `category`, `evidence_confidence`, `impact_scope`,
+`claim_status`.
+
+- `fingerprint` is lowercase 64-character SHA-256 hex.
+- `origin_severity` is one of `P0`, `P1`, `P2`, `P3`; `P0` requires
+  `effective_gate: "blocking"` and E2/E3 evidence.
+- `effective_gate` is one of `blocking`, `needs-user-decision`,
+  `recordable-risk`.
+- For a direct unsafe instruction in the reviewed NL artifact, use exactly
+  `subject_kind: "nl_artifact"`, `evidence_plane: "static"`,
+  `category: "safety_and_governance"`, `evidence_confidence: "E2-direct"`,
+  `impact_scope: "security-boundary"`, and `claim_status: "direct-static"`.
+- The other allowed `nl_artifact` categories are `format_and_encoding`,
+  `schema_contract`, `layout_and_discovery`, `reference_integrity`,
+  `semantic_workflow`, and `verification_design`. Do not use invented labels
+  such as `prompt-injection` or `reviewer-execution-boundary`.
+
 ## Boundaries
 
 - Preserve the supplied snapshot hash and relative path in your reasoning; do not substitute another file.

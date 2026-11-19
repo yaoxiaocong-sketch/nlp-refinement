@@ -4,12 +4,15 @@ import hashlib
 import importlib.util
 import io
 import json
+from contextlib import redirect_stdout
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
+
+from nlp_refinement.development_runtime import TUI_NATIVE_REQUIRED_COMMANDS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +58,10 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
         self.prepare = load_module("prepare_runtime_release", PREPARE_SCRIPT)
         self.fetch = load_module("fetch_verified_runtime_release", FETCH_SCRIPT)
 
+    def test_release_capability_commands_match_the_cli_identity_contract(self) -> None:
+        self.assertEqual(self.prepare.TUI_NATIVE_SUBCOMMANDS, TUI_NATIVE_REQUIRED_COMMANDS)
+        self.assertEqual(self.fetch.bootstrap.TUI_NATIVE_SUBCOMMANDS, TUI_NATIVE_REQUIRED_COMMANDS)
+
     def test_plan_reads_one_built_wheel_without_writing_release_records(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "project"
@@ -87,6 +94,11 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
             self.assertEqual(result["status"], "PREPARED")
             self.assertEqual(manifest["wheel"]["sha256"], hashlib.sha256(wheel.read_bytes()).hexdigest())
             self.assertEqual(manifest["wheel"]["size_bytes"], len(wheel.read_bytes()))
+            self.assertEqual(manifest["schema_version"], "nlp-refinement-runtime-release/v2")
+            self.assertEqual(manifest["tui_native_capability"], {
+                "interface_version": "nlp-refinement-tui-native/v1",
+                "required_subcommands": list(self.prepare.TUI_NATIVE_SUBCOMMANDS),
+            })
             self.assertEqual(config["plugin_version"], "1.2.3")
             self.assertEqual(config["release_manifest"]["sha256"], hashlib.sha256(manifest_path.read_bytes()).hexdigest())
 
@@ -134,6 +146,21 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
             self.assertEqual(recovered["writes"], [str(root / "runtime-bootstrap-config.json")])
             self.assertTrue((root / "runtime-bootstrap-config.json").is_file())
 
+    def test_cli_refuses_a_root_owned_by_a_different_release_preparer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            root.mkdir()
+            source_root(root, "1.2.3")
+            wheel = root / "nlp_refinement_cli-1.2.3-py3-none-any.whl"
+            wheel.write_bytes(wheel_bytes("1.2.3"))
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = self.prepare.main(["--root", str(root), "--wheel", str(wheel)])
+
+        result = json.loads(stdout.getvalue())
+        self.assertEqual(code, 2)
+        self.assertEqual(result["code"], "RELEASE_PREPARER_ROOT_MISMATCH")
+
     def test_fetcher_stages_exactly_the_manifest_pinned_wheel(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "plugin"
@@ -141,7 +168,7 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
             version = "1.2.3"
             payload = wheel_bytes(version)
             release = {
-                "schema_version": "nlp-refinement-runtime-release/v1",
+                "schema_version": "nlp-refinement-runtime-release/v2",
                 "package_name": "nlp-refinement-cli",
                 "version": version,
                 "requires_python": ">=3.11",
@@ -152,6 +179,10 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
                     "size_bytes": len(payload),
                 },
                 "commands": ["nlp-refinement", "nlp-refinement-host", "nlp-refinement-doe-prune"],
+                "tui_native_capability": {
+                    "interface_version": "nlp-refinement-tui-native/v1",
+                    "required_subcommands": list(self.prepare.TUI_NATIVE_SUBCOMMANDS),
+                },
             }
             release_bytes = json.dumps(release, sort_keys=True).encode("utf-8")
             (root / "plugin.json").write_text(
@@ -188,7 +219,7 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
             version = "1.2.3"
             payload = wheel_bytes(version)
             release = {
-                "schema_version": "nlp-refinement-runtime-release/v1",
+                "schema_version": "nlp-refinement-runtime-release/v2",
                 "package_name": "nlp-refinement-cli",
                 "version": version,
                 "requires_python": ">=3.11",
@@ -199,6 +230,10 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
                     "size_bytes": len(payload),
                 },
                 "commands": ["nlp-refinement", "nlp-refinement-host", "nlp-refinement-doe-prune"],
+                "tui_native_capability": {
+                    "interface_version": "nlp-refinement-tui-native/v1",
+                    "required_subcommands": list(self.prepare.TUI_NATIVE_SUBCOMMANDS),
+                },
             }
             release_bytes = json.dumps(release, sort_keys=True).encode("utf-8")
             (root / "plugin.json").write_text(json.dumps({"name": "nlp-refinement-cli", "version": version}), encoding="utf-8")

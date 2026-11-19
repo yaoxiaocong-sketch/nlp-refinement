@@ -14,14 +14,19 @@ That release manifest then pins the wheel URL and wheel SHA-256.
 The first setup flow is:
 
 1. Check whether the expected CLI commands are already available and report
-   the matching version through `--version`.
+   the matching version through `--version`. For the TUI-native release, also
+   require `nlp-refinement runtime-identity` to report the release-pinned
+   interface and complete subcommand set.
 2. Fetch and hash-check only the pinned release manifest and produce
    `PLAN_READY`; this does not install anything.
 3. Show the user the exact version and hashes.
 4. Only after explicit confirmation, fetch and hash-check the wheel, its exact
    byte size, and its embedded package metadata, then run
    `python -m pip install --user --no-deps --no-index <verified-wheel>`.
-5. Check each installed command on `PATH`.
+5. Check each installed command on `PATH`, then run the exact installed
+   `nlp-refinement runtime-identity`. A missing, malformed, wrong-version, or
+   incomplete interface result stops as `CLI_INTERFACE_MISMATCH`; it is not
+   treated as a valid installation.
 
 An installer failure reports a fixed code and the stages that completed. It
 does not perform an automatic uninstall because that could remove a CLI that

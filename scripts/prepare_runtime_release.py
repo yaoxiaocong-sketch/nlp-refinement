@@ -23,12 +23,21 @@ import zipfile
 PACKAGE_NAME = "nlp-refinement-cli"
 PLUGIN_NAME = "nlp-refinement-cli"
 REPOSITORY = "yaoxiaocong-sketch/nlp-refinement"
-RELEASE_SCHEMA = "nlp-refinement-runtime-release/v1"
+RELEASE_SCHEMA = "nlp-refinement-runtime-release/v2"
 BOOTSTRAP_SCHEMA = "nlp-refinement-runtime-bootstrap/v1"
 REQUIRED_COMMANDS = (
     "nlp-refinement",
     "nlp-refinement-host",
     "nlp-refinement-doe-prune",
+)
+TUI_NATIVE_INTERFACE = "nlp-refinement-tui-native/v1"
+TUI_NATIVE_SUBCOMMANDS = (
+    "runtime-identity", "scan", "batch-create", "tui-resume-locators", "resume",
+    "tui-resume-candidates", "tui-workflow-disposition", "tui-review-handoff",
+    "tui-proposal-handoff", "tui-proposal-draft-handoff", "tui-compose-assessed-proposal",
+    "tui-create-transient-root", "tui-record-review", "tui-record-child-dispatch-receipt",
+    "tui-child-dispatch-receipts", "tui-cleanup-transient-root", "tui-child-contract",
+    "tui-child-bootstrap", "patch-proposal",
 )
 VERSION_PATTERN = re.compile(r'^CLI_VERSION\s*=\s*"(?P<version>[^"]+)"\s*$', re.MULTILINE)
 
@@ -93,6 +102,10 @@ def _release_bytes(*, version: str, wheel: Path) -> bytes:
         "plugin": {"name": PLUGIN_NAME, "version": version},
         "requires_python": ">=3.11",
         "schema_version": RELEASE_SCHEMA,
+        "tui_native_capability": {
+            "interface_version": TUI_NATIVE_INTERFACE,
+            "required_subcommands": list(TUI_NATIVE_SUBCOMMANDS),
+        },
         "version": version,
         "wheel": {
             "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
@@ -180,6 +193,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--wheel", type=Path, required=True)
     parser.add_argument("--apply", action="store_true", help="Write the planned release manifest and bootstrap configuration.")
     args = parser.parse_args(argv)
+    expected_script = (args.root.resolve(strict=False) / "scripts" / Path(__file__).name).resolve(strict=False)
+    if expected_script != Path(__file__).resolve(strict=True):
+        print(json.dumps(_blocked("RELEASE_PREPARER_ROOT_MISMATCH"), sort_keys=True))
+        return 2
     result = run(root=args.root, wheel=args.wheel, apply=args.apply)
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] in {"PLAN_READY", "PREPARED"} else 2

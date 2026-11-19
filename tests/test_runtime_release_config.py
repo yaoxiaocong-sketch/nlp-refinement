@@ -30,6 +30,9 @@ class RuntimeReleaseConfigTests(unittest.TestCase):
         release = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual(release["version"], version)
         self.assertEqual(release["plugin"], {"name": "nlp-refinement-cli", "version": version})
+        self.assertEqual(release["schema_version"], "nlp-refinement-runtime-release/v2")
+        self.assertEqual(release["tui_native_capability"]["interface_version"], "nlp-refinement-tui-native/v1")
+        self.assertIn("runtime-identity", release["tui_native_capability"]["required_subcommands"])
 
 
 if __name__ == "__main__":

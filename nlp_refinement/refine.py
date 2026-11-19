@@ -18,6 +18,11 @@ from pathlib import Path
 from typing import Any
 
 from nlp_refinement.artifact_inventory import scan_artifact_inventory
+from nlp_refinement.development_runtime import (
+    DevelopmentRuntimeError,
+    resolve_development_runtime,
+    runtime_identity as development_runtime_identity,
+)
 from nlp_refinement.patch_proposal_adapter import ingest_patch_proposal, load_patch_proposal
 from nlp_refinement.host_execution_request import HostExecutionRequest
 from nlp_refinement.review_adapter import ingest_review, load_review_result
@@ -65,11 +70,52 @@ def output(value: dict[str, Any]) -> None:
     print(json.dumps(value, sort_keys=True, ensure_ascii=False))
 
 
+def invoked_cli_path() -> Path:
+    """Return the console-script path that launched this process.
+
+    Development runtime resolution deliberately applies only to an installed
+    console script.  Module execution is not an acceptable substitute for a
+    missing CLI during TUI validation.
+    """
+    candidate = Path(sys.argv[0])
+    if not candidate.is_absolute():
+        raise DevelopmentRuntimeError("CLI_PATH_INVALID: runtime resolution requires an absolute console-script path")
+    if candidate.name != "nlp-refinement":
+        raise DevelopmentRuntimeError("CLI_PATH_INVALID: runtime resolution requires the nlp-refinement console script")
+    return candidate
+
+
+def runtime_identity_command() -> int:
+    output({"command": "runtime-identity", **development_runtime_identity(invoked_cli_path())})
+    return 0
+
+
+def runtime_resolve_command(args: argparse.Namespace) -> int:
+    identity = development_runtime_identity(invoked_cli_path())
+    resolved = resolve_development_runtime(
+        args.descriptor,
+        invoked_executable=invoked_cli_path(),
+        identity=identity,
+    )
+    output({"command": "runtime-resolve", "disposition": "RESOLVED", "resolved_cli": resolved})
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="nlp-refinement")
     parser.add_argument("--version", action="version", version=CLI_VERSION)
     parser.add_argument("--state-root", type=Path, default=default_state_root())
     subcommands = parser.add_subparsers(dest="command", required=True)
+
+    subcommands.add_parser(
+        "runtime-identity",
+        help="report the machine-readable local CLI interface without creating state",
+    )
+    runtime_resolve = subcommands.add_parser(
+        "runtime-resolve",
+        help="verify an explicit development-runtime descriptor without creating state",
+    )
+    runtime_resolve.add_argument("--descriptor", type=Path, required=True)
 
     start = subcommands.add_parser("start", help="create a review-only run")
     start.add_argument("--project-dir", type=Path, required=True)
@@ -98,6 +144,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="read project-scoped resumable Batches for the native TUI workflow",
     )
     tui_batches.add_argument("root", type=Path)
+    tui_locators = subcommands.add_parser(
+        "tui-resume-locators",
+        help="read ledger-derived target roots for resumable native TUI Batches",
+    )
     tui_disposition = subcommands.add_parser(
         "tui-workflow-disposition",
         help="derive the native TUI workflow disposition for one current-project run",
@@ -110,6 +160,86 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tui_handoff.add_argument("root", type=Path)
     tui_handoff.add_argument("--run-id", required=True)
+    tui_review_handoff = subcommands.add_parser(
+        "tui-review-handoff",
+        help="build a snapshot-bound reviewer handoff from one ready ledger run",
+    )
+    tui_review_handoff.add_argument("root", type=Path)
+    tui_review_handoff.add_argument("--run-id", required=True)
+    tui_transient = subcommands.add_parser(
+        "tui-create-transient-root",
+        help="create one private run-scoped system-temporary directory for TUI child JSON",
+    )
+    tui_transient.add_argument("root", type=Path)
+    tui_transient.add_argument("--run-id", required=True)
+    tui_cleanup = subcommands.add_parser(
+        "tui-cleanup-transient-root",
+        help="remove one verified private run-scoped system-temporary directory",
+    )
+    tui_cleanup.add_argument("root", type=Path)
+    tui_cleanup.add_argument("--run-id", required=True)
+    tui_cleanup.add_argument("--transient-root", type=Path, required=True)
+    tui_review_record = subcommands.add_parser(
+        "tui-record-review",
+        help="record one reviewer result only from a private TUI transient directory",
+    )
+    tui_review_record.add_argument("root", type=Path)
+    tui_review_record.add_argument("--run-id", required=True)
+    tui_review_record.add_argument("--review-result-file", type=Path, required=True)
+    tui_review_record.add_argument("--transient-root", type=Path, required=True)
+    tui_review_record.add_argument("--observed-snapshot-hash", required=True)
+    tui_review_record.add_argument(
+        "--redaction-status", choices=("caller-attested-redacted",), required=True,
+    )
+    tui_receipt = subcommands.add_parser(
+        "tui-record-child-dispatch-receipt",
+        help="persist one content-free root-attested native-child dispatch receipt",
+    )
+    tui_receipt.add_argument("root", type=Path)
+    tui_receipt.add_argument("--run-id", required=True)
+    tui_receipt.add_argument("--receipt-file", type=Path, required=True)
+    tui_receipt.add_argument("--transient-root", type=Path, required=True)
+    tui_receipts = subcommands.add_parser(
+        "tui-child-dispatch-receipts",
+        help="read content-free persisted native-child dispatch receipts for one run",
+    )
+    tui_receipts.add_argument("root", type=Path)
+    tui_receipts.add_argument("--run-id", required=True)
+    tui_draft = subcommands.add_parser(
+        "tui-proposal-draft-handoff",
+        help="validate one untrusted proposer draft and build the assessor handoff without writing state",
+    )
+    tui_draft.add_argument("root", type=Path)
+    tui_draft.add_argument("--run-id", required=True)
+    tui_draft.add_argument("--proposal-draft-file", type=Path, required=True)
+    tui_draft.add_argument("--transient-root", type=Path)
+    tui_compose = subcommands.add_parser(
+        "tui-compose-assessed-proposal",
+        help="validate one draft and independent assessment, then render an unpersisted v6 proposal",
+    )
+    tui_compose.add_argument("root", type=Path)
+    tui_compose.add_argument("--run-id", required=True)
+    tui_compose.add_argument("--proposal-draft-file", type=Path, required=True)
+    tui_compose.add_argument("--proposal-assessment-file", type=Path, required=True)
+    tui_compose.add_argument("--transient-root", type=Path, required=True)
+    tui_contract = subcommands.add_parser(
+        "tui-child-contract",
+        help="render one versioned output contract for a generic native TUI child without creating state",
+    )
+    tui_contract.add_argument(
+        "--role", choices=("reviewer", "proposer", "proposal-assessor"), required=True,
+    )
+    tui_bootstrap = subcommands.add_parser(
+        "tui-child-bootstrap",
+        help="render a bounded native-child bootstrap prompt without creating a child",
+    )
+    tui_bootstrap.add_argument("root", type=Path)
+    tui_bootstrap.add_argument("--run-id", required=True)
+    tui_bootstrap.add_argument(
+        "--role", choices=("reviewer", "proposer", "proposal-assessor"), required=True,
+    )
+    tui_bootstrap.add_argument("--proposal-draft-file", type=Path)
+    tui_bootstrap.add_argument("--transient-root", type=Path)
 
     status = subcommands.add_parser("status", help="read a run without changing it")
     status.add_argument("--run-id", required=True)
@@ -306,6 +436,20 @@ def tui_resume_candidates(args: argparse.Namespace, store: StateStore) -> int:
     return 0
 
 
+def tui_resume_locators(store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import find_resumable_locators
+
+    output(
+        {
+            "command": "tui-resume-locators",
+            **find_resumable_locators(store),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
 def tui_workflow_disposition(args: argparse.Namespace, store: StateStore) -> int:
     from nlp_refinement.tui_workflow import _batch_item_for_run, workflow_disposition
 
@@ -332,6 +476,241 @@ def tui_proposal_handoff(args: argparse.Namespace, store: StateStore) -> int:
         {
             "command": "tui-proposal-handoff",
             "proposal_handoff": build_proposal_handoff(store, args.root, args.run_id),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def tui_review_handoff(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import build_reviewer_handoff
+
+    output(
+        {
+            "command": "tui-review-handoff",
+            "review_handoff": build_reviewer_handoff(store, args.root, args.run_id),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def _verify_tui_project_run(args: argparse.Namespace, store: StateStore) -> None:
+    from nlp_refinement.tui_workflow import _batch_item_for_run
+
+    store.get_run(args.run_id)
+    _batch_item_for_run(store, args.root, args.run_id)
+
+
+def tui_create_transient_root(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import create_tui_transient_root
+
+    _verify_tui_project_run(args, store)
+    transient_root = create_tui_transient_root(args.root, args.run_id)
+    output(
+        {
+            "command": "tui-create-transient-root",
+            "transient_root": str(transient_root),
+            "run_id": args.run_id,
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def tui_cleanup_transient_root(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import cleanup_tui_transient_root
+
+    _verify_tui_project_run(args, store)
+    cleanup_tui_transient_root(
+        project_root=args.root, transient_root=args.transient_root, run_id=args.run_id,
+    )
+    output(
+        {
+            "command": "tui-cleanup-transient-root",
+            "run_id": args.run_id,
+            "transient_root_removed": True,
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def tui_record_review(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import validate_tui_transient_file
+
+    _verify_tui_project_run(args, store)
+    validated = validate_tui_transient_file(
+        project_root=args.root,
+        transient_root=args.transient_root,
+        candidate=args.review_result_file,
+        run_id=args.run_id,
+        kind="review result",
+    )
+    args.review_result_file = validated
+    return review(args, store)
+
+
+def tui_record_child_dispatch_receipt(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import validate_tui_transient_file
+
+    _verify_tui_project_run(args, store)
+    receipt_path = validate_tui_transient_file(
+        project_root=args.root,
+        transient_root=args.transient_root,
+        candidate=args.receipt_file,
+        run_id=args.run_id,
+        kind="child dispatch receipt",
+    )
+    receipt = _load_tui_json(receipt_path, kind="child dispatch receipt")
+    persisted = store.record_tui_child_dispatch_receipt(args.run_id, receipt, now_epoch())
+    output(
+        {
+            "command": "tui-record-child-dispatch-receipt",
+            "run_id": args.run_id,
+            "receipt": persisted,
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def tui_child_dispatch_receipts(args: argparse.Namespace, store: StateStore) -> int:
+    _verify_tui_project_run(args, store)
+    output(
+        {
+            "command": "tui-child-dispatch-receipts",
+            "run_id": args.run_id,
+            "receipts": store.list_tui_child_dispatch_receipts(args.run_id),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def tui_child_contract(args: argparse.Namespace) -> int:
+    from nlp_refinement.tui_workflow import build_child_contract
+
+    output(
+        {
+            "command": "tui-child-contract",
+            "child_contract": build_child_contract(args.role),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def tui_child_bootstrap(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import (
+        build_child_bootstrap,
+        build_proposal_assessment_handoff,
+        build_proposal_handoff,
+        build_reviewer_handoff,
+        validate_tui_transient_file,
+    )
+
+    transient_root = args.transient_root
+    if args.role == "reviewer":
+        build_reviewer_handoff(store, args.root, args.run_id)
+    elif args.role == "proposer":
+        build_proposal_handoff(store, args.root, args.run_id)
+    else:
+        if args.proposal_draft_file is None:
+            raise ValueError("proposal assessor bootstrap requires --proposal-draft-file")
+        transient_root = args.transient_root or args.proposal_draft_file.parent
+        draft_path = validate_tui_transient_file(
+            project_root=args.root,
+            transient_root=transient_root,
+            candidate=args.proposal_draft_file,
+            run_id=args.run_id,
+            kind="proposal draft",
+        )
+        draft = _load_tui_json(draft_path, kind="proposal draft")
+        build_proposal_assessment_handoff(
+            draft, build_proposal_handoff(store, args.root, args.run_id),
+        )
+    output(
+        {
+            "command": "tui-child-bootstrap",
+            "child_bootstrap": build_child_bootstrap(
+                role=args.role,
+                executable=invoked_cli_path(),
+                state_root=args.state_root,
+                project_root=args.root,
+                run_id=args.run_id,
+                proposal_draft_file=args.proposal_draft_file,
+                transient_root=transient_root,
+            ),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def _load_tui_json(path: Path, *, kind: str) -> dict[str, Any]:
+    try:
+        decoded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"{kind} must be one readable JSON object") from error
+    if not isinstance(decoded, dict):
+        raise ValueError(f"{kind} must be one JSON object")
+    return decoded
+
+
+def tui_proposal_draft_handoff(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import (
+        build_proposal_assessment_handoff, build_proposal_handoff, validate_tui_transient_file,
+    )
+
+    draft = _load_tui_json(
+        validate_tui_transient_file(
+            project_root=args.root,
+            transient_root=args.transient_root or args.proposal_draft_file.parent,
+            candidate=args.proposal_draft_file,
+            run_id=args.run_id,
+            kind="proposal draft",
+        ),
+        kind="proposal draft",
+    )
+    handoff = build_proposal_handoff(store, args.root, args.run_id)
+    output(
+        {
+            "command": "tui-proposal-draft-handoff",
+            "proposal_assessment_handoff": build_proposal_assessment_handoff(draft, handoff),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def tui_compose_assessed_proposal(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import (
+        build_proposal_handoff, compose_assessed_v6_proposal, validate_tui_transient_file,
+    )
+
+    handoff = build_proposal_handoff(store, args.root, args.run_id)
+    draft = _load_tui_json(validate_tui_transient_file(
+        project_root=args.root, transient_root=args.transient_root,
+        candidate=args.proposal_draft_file, run_id=args.run_id, kind="proposal draft",
+    ), kind="proposal draft")
+    assessment = _load_tui_json(validate_tui_transient_file(
+        project_root=args.root, transient_root=args.transient_root,
+        candidate=args.proposal_assessment_file, run_id=args.run_id, kind="proposal assessment",
+    ), kind="proposal assessment")
+    output(
+        {
+            "command": "tui-compose-assessed-proposal",
+            "proposal_result": compose_assessed_v6_proposal(draft, assessment, handoff),
             "no_model_call_attestation": True,
             "no_target_write_attestation": True,
         }
@@ -487,6 +866,20 @@ def retention_sweep(args: argparse.Namespace, store: StateStore) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command in {"runtime-identity", "runtime-resolve"}:
+        try:
+            if args.command == "runtime-identity":
+                return runtime_identity_command()
+            return runtime_resolve_command(args)
+        except (DevelopmentRuntimeError, OSError, ValueError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
+    if args.command == "tui-child-contract":
+        try:
+            return tui_child_contract(args)
+        except ValueError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
     if args.command == "scan":
         try:
             return scan(args)
@@ -514,10 +907,30 @@ def main(argv: list[str] | None = None) -> int:
             return batch_events(args, store)
         if args.command == "tui-resume-candidates":
             return tui_resume_candidates(args, store)
+        if args.command == "tui-resume-locators":
+            return tui_resume_locators(store)
         if args.command == "tui-workflow-disposition":
             return tui_workflow_disposition(args, store)
         if args.command == "tui-proposal-handoff":
             return tui_proposal_handoff(args, store)
+        if args.command == "tui-review-handoff":
+            return tui_review_handoff(args, store)
+        if args.command == "tui-create-transient-root":
+            return tui_create_transient_root(args, store)
+        if args.command == "tui-cleanup-transient-root":
+            return tui_cleanup_transient_root(args, store)
+        if args.command == "tui-record-review":
+            return tui_record_review(args, store)
+        if args.command == "tui-record-child-dispatch-receipt":
+            return tui_record_child_dispatch_receipt(args, store)
+        if args.command == "tui-child-dispatch-receipts":
+            return tui_child_dispatch_receipts(args, store)
+        if args.command == "tui-child-bootstrap":
+            return tui_child_bootstrap(args, store)
+        if args.command == "tui-proposal-draft-handoff":
+            return tui_proposal_draft_handoff(args, store)
+        if args.command == "tui-compose-assessed-proposal":
+            return tui_compose_assessed_proposal(args, store)
         if args.command == "status":
             return status(args, store)
         if args.command == "resume":

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
 import hashlib
@@ -13,7 +13,8 @@ import unittest
 from pathlib import Path
 
 from nlp_refinement.host_refine import build_parser as build_host_parser
-from nlp_refinement.refine import build_parser, project_identity, project_key
+from nlp_refinement.refine import build_parser, main, project_identity, project_key
+from unittest.mock import patch
 from nlp_refinement.state_store import StateStore
 
 
@@ -77,6 +78,14 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         return str(json.loads(completed.stdout)["inventory"]["inventory_hash"])
 
+    def create_tui_scratch(self, run_id: str) -> Path:
+        created = self.invoke("tui-create-transient-root", str(self.target), "--run-id", run_id)
+        self.assertEqual(created.returncode, 0, created.stderr)
+        scratch = Path(json.loads(created.stdout)["transient_root"])
+        self.assertTrue(scratch.is_dir())
+        self.assertFalse(scratch.is_relative_to(self.target.resolve()))
+        return scratch
+
     def test_scan_is_read_only_and_does_not_create_a_state_ledger(self) -> None:
         artifact = self.target / "SKILL.md"
         artifact.write_text("# fixture\n", encoding="utf-8")
@@ -88,6 +97,24 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(rendered["command"], "scan")
         self.assertEqual(rendered["inventory"]["scan_status"], "complete")
         self.assertEqual(rendered["inventory"]["candidates"][0]["relative_path"], "SKILL.md")
+        self.assertFalse((self.state_root / "state.db").exists())
+
+    def test_tui_child_contract_is_read_only_and_cannot_fall_back_to_an_unknown_role(self) -> None:
+        proposer = self.invoke("tui-child-contract", "--role", "proposer")
+
+        self.assertEqual(proposer.returncode, 0, proposer.stderr)
+        rendered = json.loads(proposer.stdout)
+        self.assertEqual(rendered["command"], "tui-child-contract")
+        self.assertEqual(rendered["child_contract"]["role"], "proposer")
+        self.assertEqual(rendered["child_contract"]["output_schema"], "proposal-draft/v1")
+        self.assertTrue(rendered["no_model_call_attestation"])
+        self.assertTrue(rendered["no_target_write_attestation"])
+        self.assertFalse((self.state_root / "state.db").exists())
+
+        unknown = self.invoke("tui-child-contract", "--role", "repairer")
+
+        self.assertEqual(unknown.returncode, 2)
+        self.assertIn("invalid choice", unknown.stderr)
         self.assertFalse((self.state_root / "state.db").exists())
 
     def test_batch_create_atomically_creates_ready_child_runs_without_model_calls(self) -> None:
@@ -134,6 +161,24 @@ class RefineCommandTests(unittest.TestCase):
         self.assertTrue(rendered["no_model_call_attestation"])
         self.assertTrue(rendered["no_target_write_attestation"])
 
+    def test_tui_resume_locators_reads_the_ledger_without_a_current_project_root(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+
+        queried = self.invoke("tui-resume-locators")
+
+        self.assertEqual(queried.returncode, 0, queried.stderr)
+        rendered = json.loads(queried.stdout)
+        self.assertEqual(rendered["command"], "tui-resume-locators")
+        self.assertEqual(len(rendered["locators"]), 1)
+        self.assertEqual(rendered["locators"][0]["target_project_root"], str(self.target.resolve()))
+        self.assertEqual(rendered["unavailable"], [])
+        self.assertTrue(rendered["no_model_call_attestation"])
+        self.assertTrue(rendered["no_target_write_attestation"])
+
     def test_tui_proposal_handoff_uses_accepted_review_and_current_batch_snapshot(self) -> None:
         artifact = self.target / "AGENTS.md"
         artifact.write_text("# rules\n", encoding="utf-8")
@@ -163,6 +208,246 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(proposal_handoff["artifact_model_view"], "# rules\n")
         self.assertTrue(rendered["no_model_call_attestation"])
         self.assertTrue(rendered["no_target_write_attestation"])
+
+    def test_tui_reviewer_bootstrap_does_not_require_an_assessor_transient_root(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
+
+        executable = self.temp_path / "runtime-venv" / "bin" / "nlp-refinement"
+        executable.parent.mkdir(parents=True)
+        executable.write_text("fixture", encoding="utf-8")
+        captured = io.StringIO()
+        with patch("nlp_refinement.refine.sys.argv", [str(executable)]), redirect_stdout(captured):
+            self.assertEqual(
+                main([
+                    "--state-root", str(self.state_root), "tui-child-bootstrap", str(self.target),
+                    "--run-id", run_id, "--role", "reviewer",
+                ]),
+                0,
+            )
+
+        rendered = json.loads(captured.getvalue())["child_bootstrap"]
+        self.assertEqual(rendered["role"], "reviewer")
+        self.assertIn("tui-review-handoff", rendered["prompt"])
+
+    def test_tui_dispatch_receipt_is_persisted_before_scratch_cleanup(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
+        scratch = self.create_tui_scratch(run_id)
+        receipt = {
+            "receipt_schema": "tui-child-dispatch-receipt/v1",
+            "role": "reviewer",
+            "child_thread_id": "01a1eca4-a1f1-7820-8297-6845ff478aba",
+            "contract_sha256": "a" * 64,
+            "prompt_sha256": "b" * 64,
+            "prompt_utf8_bytes": 779,
+            "observed_cwd": "unverified",
+            "host_role_binding": "unverified",
+            "child_sandbox": "unverified",
+        }
+        receipt_file = scratch / "reviewer-dispatch-receipt.json"
+        receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+
+        recorded = self.invoke(
+            "tui-record-child-dispatch-receipt", str(self.target), "--run-id", run_id,
+            "--receipt-file", str(receipt_file), "--transient-root", str(scratch),
+        )
+
+        self.assertEqual(recorded.returncode, 0, recorded.stderr)
+        self.assertEqual(json.loads(recorded.stdout)["receipt"], receipt)
+        cleaned = self.invoke(
+            "tui-cleanup-transient-root", str(self.target), "--run-id", run_id, "--transient-root", str(scratch),
+        )
+        self.assertEqual(cleaned.returncode, 0, cleaned.stderr)
+        listed = self.invoke("tui-child-dispatch-receipts", str(self.target), "--run-id", run_id)
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertEqual(json.loads(listed.stdout)["receipts"], [receipt])
+
+    def test_tui_assessment_commands_compose_v6_without_writing_the_ledger(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        item = json.loads(created.stdout)["batch"]["items"][0]
+        run_id = str(item["child_run_id"])
+        reviewed = self.review(
+            run_id, self.write_review_result(), observed_snapshot=str(item["snapshot_hash"]),
+        )
+        self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
+        handoff = json.loads(self.invoke("tui-proposal-handoff", str(self.target), "--run-id", run_id).stdout)[
+            "proposal_handoff"
+        ]
+        fixture = json.loads((ROOT / "fixtures/v6/patch-proposal-result.json").read_text(encoding="utf-8"))
+        draft = {
+            "schema_version": "proposal-draft/v1",
+            "phase_name": "proposal-draft",
+            "proposer_id": "fixture-proposer",
+            "summary": fixture["summary"],
+            "base_snapshot_hash": handoff["snapshot_hash"],
+            "review_artifact_id": handoff["review_artifact_id"],
+            "no_target_write_attestation": True,
+            "proposals": [{key: value for key, value in fixture["proposals"][0].items() if key != "assessment"}],
+        }
+        draft["proposals"][0]["finding_id"] = handoff["open_finding_ids"][0]
+        draft["proposals"][0]["causal_evidence_refs"] = [handoff["review_artifact_id"]]
+        scratch = self.create_tui_scratch(run_id)
+        draft_file = scratch / "proposal-draft.json"
+        draft_file.write_text(json.dumps(draft), encoding="utf-8")
+        before_artifacts = StateStore(self.state_root / "state.db").list_artifacts(run_id)
+
+        assessment_handoff = self.invoke(
+            "tui-proposal-draft-handoff", str(self.target), "--run-id", run_id,
+            "--proposal-draft-file", str(draft_file), "--transient-root", str(scratch),
+        )
+
+        self.assertEqual(assessment_handoff.returncode, 0, assessment_handoff.stderr)
+        rendered_handoff = json.loads(assessment_handoff.stdout)["proposal_assessment_handoff"]
+        self.assertEqual(rendered_handoff["proposal_draft"], draft)
+        self.assertEqual(rendered_handoff["artifact_model_view"], "# rules\n")
+        self.assertEqual(StateStore(self.state_root / "state.db").list_artifacts(run_id), before_artifacts)
+        assessment = {
+            "schema_version": "proposal-assessment/v1",
+            "phase_name": "proposal-assessment",
+            "assessor_id": "fixture-independent-assessor",
+            "draft_sha256": rendered_handoff["draft_sha256"],
+            "base_snapshot_hash": handoff["snapshot_hash"],
+            "review_artifact_id": handoff["review_artifact_id"],
+            "assessments": [{
+                "finding_id": handoff["open_finding_ids"][0],
+                **fixture["proposals"][0]["assessment"],
+            }],
+        }
+        assessment["assessments"][0]["assessor_id"] = "fixture-independent-assessor"
+        assessment["assessments"][0]["evidence_refs"] = [handoff["review_artifact_id"]]
+        assessment_file = scratch / "proposal-assessment.json"
+        assessment_file.write_text(json.dumps(assessment), encoding="utf-8")
+
+        composed = self.invoke(
+            "tui-compose-assessed-proposal", str(self.target), "--run-id", run_id,
+            "--proposal-draft-file", str(draft_file), "--proposal-assessment-file", str(assessment_file),
+            "--transient-root", str(scratch),
+        )
+
+        self.assertEqual(composed.returncode, 0, composed.stderr)
+        final = json.loads(composed.stdout)["proposal_result"]
+        self.assertEqual(final["schema_version"], "6.0")
+        self.assertEqual(final["proposals"][0]["assessment"]["assessor_id"], "fixture-independent-assessor")
+        self.assertEqual(StateStore(self.state_root / "state.db").list_artifacts(run_id), before_artifacts)
+        assessment["assessor_id"] = "fixture-proposer"
+        assessment["assessments"][0]["assessor_id"] = "fixture-proposer"
+        assessment_file.write_text(json.dumps(assessment), encoding="utf-8")
+        rejected = self.invoke(
+            "tui-compose-assessed-proposal", str(self.target), "--run-id", run_id,
+            "--proposal-draft-file", str(draft_file), "--proposal-assessment-file", str(assessment_file),
+            "--transient-root", str(scratch),
+        )
+        self.assertEqual(rejected.returncode, 2)
+        self.assertIn("distinct from proposer", rejected.stderr)
+        self.assertEqual(StateStore(self.state_root / "state.db").list_artifacts(run_id), before_artifacts)
+
+    def test_tui_child_handoff_files_must_stay_in_the_private_transient_root(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        item = json.loads(created.stdout)["batch"]["items"][0]
+        run_id = str(item["child_run_id"])
+        snapshot = str(item["snapshot_hash"])
+        scratch = self.create_tui_scratch(run_id)
+
+        target_review = self.target / ".reviewer-output.json"
+        target_review.write_text(self.write_review_result().read_text(encoding="utf-8"), encoding="utf-8")
+        rejected_review = self.invoke(
+            "tui-record-review", str(self.target), "--run-id", run_id,
+            "--review-result-file", str(target_review), "--transient-root", str(scratch),
+            "--observed-snapshot-hash", snapshot, "--redaction-status", "caller-attested-redacted",
+        )
+        self.assertEqual(rejected_review.returncode, 2)
+        self.assertIn("inside the run-scoped TUI transient root", rejected_review.stderr)
+
+        review_file = scratch / "review-result.json"
+        review_file.write_text(target_review.read_text(encoding="utf-8"), encoding="utf-8")
+        accepted_review = self.invoke(
+            "tui-record-review", str(self.target), "--run-id", run_id,
+            "--review-result-file", str(review_file), "--transient-root", str(scratch),
+            "--observed-snapshot-hash", snapshot, "--redaction-status", "caller-attested-redacted",
+        )
+        self.assertEqual(accepted_review.returncode, 0, accepted_review.stderr)
+        handoff = json.loads(
+            self.invoke("tui-proposal-handoff", str(self.target), "--run-id", run_id).stdout
+        )["proposal_handoff"]
+        fixture = json.loads((ROOT / "fixtures/v6/patch-proposal-result.json").read_text(encoding="utf-8"))
+        draft = {
+            "schema_version": "proposal-draft/v1",
+            "phase_name": "proposal-draft",
+            "proposer_id": "fixture-proposer",
+            "summary": fixture["summary"],
+            "base_snapshot_hash": handoff["snapshot_hash"],
+            "review_artifact_id": handoff["review_artifact_id"],
+            "no_target_write_attestation": True,
+            "proposals": [{key: value for key, value in fixture["proposals"][0].items() if key != "assessment"}],
+        }
+        draft["proposals"][0]["finding_id"] = handoff["open_finding_ids"][0]
+        draft["proposals"][0]["causal_evidence_refs"] = [handoff["review_artifact_id"]]
+        target_draft = self.target / ".proposal-draft.json"
+        target_draft.write_text(json.dumps(draft), encoding="utf-8")
+        rejected_draft = self.invoke(
+            "tui-proposal-draft-handoff", str(self.target), "--run-id", run_id,
+            "--proposal-draft-file", str(target_draft), "--transient-root", str(scratch),
+        )
+        self.assertEqual(rejected_draft.returncode, 2)
+        self.assertIn("inside the run-scoped TUI transient root", rejected_draft.stderr)
+
+        draft_file = scratch / "proposal-draft.json"
+        draft_file.write_text(json.dumps(draft), encoding="utf-8")
+        assessment_handoff = json.loads(self.invoke(
+            "tui-proposal-draft-handoff", str(self.target), "--run-id", run_id,
+            "--proposal-draft-file", str(draft_file), "--transient-root", str(scratch),
+        ).stdout)["proposal_assessment_handoff"]
+        assessment = {
+            "schema_version": "proposal-assessment/v1",
+            "phase_name": "proposal-assessment",
+            "assessor_id": "fixture-independent-assessor",
+            "draft_sha256": assessment_handoff["draft_sha256"],
+            "base_snapshot_hash": handoff["snapshot_hash"],
+            "review_artifact_id": handoff["review_artifact_id"],
+            "assessments": [{
+                "finding_id": handoff["open_finding_ids"][0],
+                **fixture["proposals"][0]["assessment"],
+                "assessor_id": "fixture-independent-assessor",
+                "evidence_refs": [handoff["review_artifact_id"]],
+            }],
+        }
+        target_assessment = self.target / ".proposal-assessment.json"
+        target_assessment.write_text(json.dumps(assessment), encoding="utf-8")
+        rejected_assessment = self.invoke(
+            "tui-compose-assessed-proposal", str(self.target), "--run-id", run_id,
+            "--proposal-draft-file", str(draft_file), "--proposal-assessment-file", str(target_assessment),
+            "--transient-root", str(scratch),
+        )
+        self.assertEqual(rejected_assessment.returncode, 2)
+        self.assertIn("inside the run-scoped TUI transient root", rejected_assessment.stderr)
+
+        cleanup = self.invoke(
+            "tui-cleanup-transient-root", str(self.target), "--run-id", run_id,
+            "--transient-root", str(scratch),
+        )
+        self.assertEqual(cleanup.returncode, 0, cleanup.stderr)
+        self.assertFalse(scratch.exists())
 
     def test_batch_create_requires_a_confirmed_inventory_hash_before_initializing_a_ledger(self) -> None:
         (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")

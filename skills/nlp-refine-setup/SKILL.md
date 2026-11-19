@@ -14,7 +14,9 @@ Codex app-server or inspect a target artifact.
 Run only the packaged `scripts/nlp_refinement_runtime_setup.py` from the
 absolute Plugin root provided by the host. It reads the Plugin-owned
 `runtime-bootstrap-config.json`, checks all three commands on `PATH` with their
-`--version` interface, and accepts no model-supplied URL or cache path.
+`--version` interface, then requires `nlp-refinement runtime-identity` to
+match the release-pinned TUI-native interface and subcommand set. It accepts no
+model-supplied URL or cache path.
 
 If it returns `ALREADY_INSTALLED`, report setup complete. Do not download,
 install, upgrade, uninstall, or change `PATH`.
@@ -40,8 +42,9 @@ SHA-256 checks.
 The bootstrap result is authoritative for this setup attempt:
 
 - `PLAN_READY`: show the plan and wait for confirmation.
-- `ALREADY_INSTALLED`: report that all three PATH commands match the Plugin
-  version; do not install anything.
+- `ALREADY_INSTALLED`: report that all three PATH commands and the
+  release-pinned TUI-native interface match the Plugin version; do not install
+  anything.
 - `INSTALLED`: ask the user to start a fresh Codex session, then use
   `$nlp-refine` normally.
 - `BLOCKED`: show only its code, completed stages, and next action. Do not

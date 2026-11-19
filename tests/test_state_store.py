@@ -84,6 +84,20 @@ def finding_payload() -> dict[str, object]:
     }
 
 
+def tui_dispatch_receipt(role: str = "reviewer") -> dict[str, object]:
+    return {
+        "receipt_schema": "tui-child-dispatch-receipt/v1",
+        "role": role,
+        "child_thread_id": "01a1eca4-a1f1-7820-8297-6845ff478aba",
+        "contract_sha256": "a" * 64,
+        "prompt_sha256": "b" * 64,
+        "prompt_utf8_bytes": 779,
+        "observed_cwd": "unverified",
+        "host_role_binding": "unverified",
+        "child_sandbox": "unverified",
+    }
+
+
 class StateStoreTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -519,6 +533,27 @@ class StateStoreTests(unittest.TestCase):
         events = self.store.list_events(RUN_ID)
         self.assertIn("immutable_anchor_hash", events[0]["payload"])
         self.assertNotIn("immutable_anchor", events[0]["payload"])
+
+    def test_tui_dispatch_receipt_is_content_free_durable_and_role_unique(self) -> None:
+        receipt = tui_dispatch_receipt()
+
+        persisted = self.store.record_tui_child_dispatch_receipt(RUN_ID, receipt, now=1_001)
+
+        self.assertEqual(persisted, receipt)
+        self.assertEqual(self.store.get_run(RUN_ID)["revision"], 1)
+        self.assertEqual(self.store.list_tui_child_dispatch_receipts(RUN_ID), [receipt])
+        reopened = StateStore(self.store.database_path)
+        self.assertEqual(reopened.list_tui_child_dispatch_receipts(RUN_ID), [receipt])
+        with self.assertRaisesRegex(ValueError, "already exists"):
+            self.store.record_tui_child_dispatch_receipt(RUN_ID, receipt, now=1_002)
+        with self.assertRaisesRegex(ValueError, "observed_cwd"):
+            self.store.record_tui_child_dispatch_receipt(
+                RUN_ID, receipt | {"role": "proposer", "observed_cwd": "/secret/project"}, now=1_003,
+            )
+        with self.assertRaisesRegex(ValueError, "unexpected fields"):
+            self.store.record_tui_child_dispatch_receipt(
+                RUN_ID, receipt | {"role": "proposer", "submitted_prompt": "must not persist"}, now=1_004,
+            )
 
 
 if __name__ == "__main__":

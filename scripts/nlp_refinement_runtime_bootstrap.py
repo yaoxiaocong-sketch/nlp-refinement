@@ -18,13 +18,13 @@ import site
 import subprocess
 import sys
 import tempfile
-from typing import Callable
+from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 import zipfile
 
 
-RELEASE_SCHEMA = "nlp-refinement-runtime-release/v1"
+RELEASE_SCHEMA = "nlp-refinement-runtime-release/v2"
 PACKAGE_NAME = "nlp-refinement-cli"
 REQUIRED_COMMANDS = (
     "nlp-refinement",
@@ -32,6 +32,28 @@ REQUIRED_COMMANDS = (
     "nlp-refinement-doe-prune",
 )
 MAX_RELEASE_MANIFEST_BYTES = 64 * 1024
+TUI_NATIVE_INTERFACE = "nlp-refinement-tui-native/v1"
+TUI_NATIVE_SUBCOMMANDS = (
+    "runtime-identity",
+    "scan",
+    "batch-create",
+    "tui-resume-locators",
+    "resume",
+    "tui-resume-candidates",
+    "tui-workflow-disposition",
+    "tui-review-handoff",
+    "tui-proposal-handoff",
+    "tui-proposal-draft-handoff",
+    "tui-compose-assessed-proposal",
+    "tui-create-transient-root",
+    "tui-record-review",
+    "tui-record-child-dispatch-receipt",
+    "tui-child-dispatch-receipts",
+    "tui-cleanup-transient-root",
+    "tui-child-contract",
+    "tui-child-bootstrap",
+    "patch-proposal",
+)
 
 
 def _blocked(code: str, *, completed: list[str] | None = None) -> dict[str, object]:
@@ -120,7 +142,13 @@ def _release_is_compatible(release: dict[str, object], plugin: tuple[str, str]) 
     plugin_record = release.get("plugin")
     wheel = release.get("wheel")
     commands = release.get("commands")
-    if not isinstance(plugin_record, dict) or not isinstance(wheel, dict) or not isinstance(commands, list):
+    capability = release.get("tui_native_capability")
+    if (
+        not isinstance(plugin_record, dict)
+        or not isinstance(wheel, dict)
+        or not isinstance(commands, list)
+        or not isinstance(capability, dict)
+    ):
         return False
     return (
         release.get("schema_version") == RELEASE_SCHEMA
@@ -135,11 +163,47 @@ def _release_is_compatible(release: dict[str, object], plugin: tuple[str, str]) 
         and isinstance(wheel.get("size_bytes"), int)
         and 0 < wheel["size_bytes"] <= 64 * 1024 * 1024
         and tuple(commands) == REQUIRED_COMMANDS
+        and set(capability) == {"interface_version", "required_subcommands"}
+        and capability.get("interface_version") == TUI_NATIVE_INTERFACE
+        and isinstance(capability.get("required_subcommands"), list)
+        and tuple(capability["required_subcommands"]) == TUI_NATIVE_SUBCOMMANDS
     )
 
 
 def _run_command(command: list[str]) -> None:
     subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _read_runtime_identity(executable: Path) -> Mapping[str, Any]:
+    completed = subprocess.run(
+        [str(executable), "runtime-identity"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    decoded = json.loads(completed.stdout)
+    if not isinstance(decoded, dict):
+        raise ValueError("runtime identity must be an object")
+    return decoded
+
+
+def _identity_is_compatible(identity: Mapping[str, Any], *, executable: Path, version: str) -> bool:
+    try:
+        reported_executable = Path(str(identity["executable"])).resolve(strict=True)
+    except (KeyError, OSError, TypeError, ValueError):
+        return False
+    commands = identity.get("commands")
+    return (
+        identity.get("schema_version") == "nlp-refinement-runtime-identity/v1"
+        and identity.get("distribution_name") == PACKAGE_NAME
+        and identity.get("distribution_version") == version
+        and identity.get("interface_version") == TUI_NATIVE_INTERFACE
+        and isinstance(commands, list)
+        and tuple(commands) == TUI_NATIVE_SUBCOMMANDS
+        and reported_executable == executable.resolve()
+        and identity.get("no_model_call_attestation") is True
+        and identity.get("no_target_write_attestation") is True
+    )
 
 
 def _user_scripts_dir() -> Path:
@@ -154,6 +218,7 @@ def run(
     apply: bool,
     download: Callable[[str, int], bytes] = _download,
     run_command: Callable[[list[str]], None] = _run_command,
+    read_runtime_identity: Callable[[Path], Mapping[str, Any]] = _read_runtime_identity,
     script_dir: Path | None = None,
 ) -> dict[str, object]:
     """Prepare or apply an installation without accepting unpinned sources."""
@@ -252,12 +317,26 @@ def run(
             "mismatched_commands": mismatched,
             "next_action": "The verified user-site CLI is not the command currently selected by PATH. Update PATH or start a new terminal/session, then verify again.",
         }
+    cli_path = expected_dir / "nlp-refinement"
+    try:
+        identity = read_runtime_identity(cli_path)
+    except Exception:
+        return _blocked(
+            "CLI_INTERFACE_MISMATCH",
+            completed=["release-manifest-verified", "wheel-verified", "pip-installed", "commands-visible"],
+        )
+    if not _identity_is_compatible(identity, executable=cli_path, version=version):
+        return _blocked(
+            "CLI_INTERFACE_MISMATCH",
+            completed=["release-manifest-verified", "wheel-verified", "pip-installed", "commands-visible"],
+        )
     return {
         "status": "INSTALLED",
         "cli_version": version,
         "plugin_version": plugin[1],
         "commands": list(REQUIRED_COMMANDS),
-        "completed_stages": ["release-manifest-verified", "wheel-verified", "pip-installed", "commands-visible"],
+        "interface_version": TUI_NATIVE_INTERFACE,
+        "completed_stages": ["release-manifest-verified", "wheel-verified", "pip-installed", "commands-visible", "runtime-interface-verified"],
     }
 
 

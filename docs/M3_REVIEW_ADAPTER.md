@@ -2,8 +2,8 @@
 
 ## Boundary
 
-M3 does not call a model. An external human or model may use
-`nlp_refinement/resources/prompts/review-phase.v5.md`, then submit a pre-redacted JSON result through:
+M3 does not call a model. The TUI reviewer contract or another external human
+or model may submit a pre-redacted JSON result through:
 
 ```sh
 nlp-refinement review --run-id <run-id> \
@@ -30,7 +30,7 @@ its original READY run rather than leaving an intermediate REVIEWING state.
 
 ## Deduplication and stopping evidence
 
-The Coordinator owns IDs and writes. It assigns `F-001`, `F-002`, and so on;
+The adapter owns IDs and writes. It assigns `F-001`, `F-002`, and so on;
 the external reviewer cannot pick them. A matching fingerprint for an **open**
 finding increments `repeat_count`, records a new review-artifact reference, and
 updates `last_probe`. Severity, gate, invariant, subject kind, evidence plane,

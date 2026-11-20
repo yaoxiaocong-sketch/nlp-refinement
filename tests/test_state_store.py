@@ -458,6 +458,40 @@ class StateStoreTests(unittest.TestCase):
             self.store.get_run(RUN_ID)
         self.assertEqual(self.store.list_artifacts(RUN_ID), [])
 
+    def test_retention_reads_and_purges_a_historical_host_receipt_without_host_runtime(self) -> None:
+        lease = self.acquire()
+        receipt = self.store.append_artifact(
+            RUN_ID,
+            0,
+            lease["token"],
+            "integrity",
+            "coordinator",
+            (
+                '{"artifact_role":"host-observation/v2","authenticity_level":"local-host-observed",'
+                '"role":"reviewer","thread_id":"thread_legacy","turn_id":"turn_legacy",'
+                '"turn_status":"completed","host_version":"legacy","model":"legacy",'
+                '"timeout_seconds":600,"requested_sandbox":"read-only",'
+                '"requested_approval_policy":"untrusted","effective_sandbox":"unverified"}'
+            ),
+            redaction_status="system-metadata",
+            now=1_001,
+        )
+        self.assertEqual(self.store.list_artifacts(RUN_ID)[0]["artifact_id"], receipt["artifact_id"])
+        self.store.release_lease(RUN_ID, lease["token"], now=1_001)
+        with sqlite3.connect(self.store.database_path) as connection:
+            connection.execute(
+                "UPDATE runs SET state = ?, outcome = ?, updated_at = ? WHERE run_id = ?",
+                ("PASS", "PASS", 10, RUN_ID),
+            )
+
+        purge_at = 10 + 31 * 24 * 60 * 60
+        preview = self.store.retention_preview(purge_at)
+        self.assertEqual(preview["actions"], [{"action": "purge-run", "run_id": RUN_ID}])
+        self.store.apply_retention(str(preview["plan_hash"]), purge_at + 5)
+        with self.assertRaises(KeyError):
+            self.store.get_run(RUN_ID)
+        self.assertEqual(self.store.list_artifacts(RUN_ID), [])
+
     def test_retention_plan_requires_an_exact_current_confirmation(self) -> None:
         preview = self.store.retention_preview(1_000 + 14 * 24 * 60 * 60)
         self.store.create_run(run_payload() | {"run_id": "run_bbbbbbbbbbbb"}, immutable_anchor={"goal": "other"}, now=1_000)
@@ -553,6 +587,20 @@ class StateStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unexpected fields"):
             self.store.record_tui_child_dispatch_receipt(
                 RUN_ID, receipt | {"role": "proposer", "submitted_prompt": "must not persist"}, now=1_004,
+            )
+
+    def test_tui_dispatch_receipt_accepts_codex_canonical_child_task_path(self) -> None:
+        """Codex TUI exposes generic children by canonical task path, not UUID."""
+        receipt = tui_dispatch_receipt("proposer") | {"child_thread_id": "/root/resume_proposer"}
+
+        persisted = self.store.record_tui_child_dispatch_receipt(RUN_ID, receipt, now=1_001)
+
+        self.assertEqual(persisted, receipt)
+        with self.assertRaisesRegex(ValueError, "thread ID"):
+            self.store.record_tui_child_dispatch_receipt(
+                RUN_ID,
+                receipt | {"role": "reviewer", "child_thread_id": "/root/child with spaces"},
+                now=1_002,
             )
 
 

@@ -296,18 +296,21 @@ class TuiWorkflowTests(unittest.TestCase):
         self.assertIn(build_child_contract("proposer")["contract_sha256"], proposer["prompt"])
 
         # The assessor adds an absolute transient-draft path to its second
-        # read-only command. Exercise an ordinary absolute worktree/state
-        # layout so the native 1,000-byte boundary is covered.
-        long_root = self.root.parent / "assessment"
-        long_root.mkdir()
-        long_state_root = self.root.parent / "state"
-        long_state_root.mkdir()
+        # read-only command. Exercise the long absolute executable, state,
+        # target, and system-temporary paths used by isolated wheel acceptance.
+        long_root = self.root.parent / "nlp-refinement-0.12.1-acceptance" / "fixture-project"
+        long_root.mkdir(parents=True)
+        long_state_root = self.root.parent / "nlp-refinement-0.12.1-acceptance" / "state"
+        long_state_root.mkdir(parents=True)
+        long_executable = self.root.parent / "nlp-refinement-0.12.1-acceptance" / "venv" / "bin" / "nlp-refinement"
+        long_executable.parent.mkdir(parents=True)
+        long_executable.write_text("fixture", encoding="utf-8")
         transient_root = create_tui_transient_root(long_root, "run_" + ("r" * 32))
         draft_file = transient_root / "proposal-draft.json"
         draft_file.write_text("{}", encoding="utf-8")
         assessor = build_child_bootstrap(
             role="proposal-assessor",
-            executable=Path("/bin/echo"),
+            executable=long_executable,
             state_root=long_state_root,
             project_root=long_root,
             run_id="run_" + ("r" * 32),

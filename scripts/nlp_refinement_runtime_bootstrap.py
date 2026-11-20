@@ -24,9 +24,13 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 import zipfile
 
 
-RELEASE_SCHEMA = "nlp-refinement-runtime-release/v2"
+RELEASE_SCHEMA = "nlp-refinement-runtime-release/v3"
+LEGACY_RELEASE_SCHEMA = "nlp-refinement-runtime-release/v2"
 PACKAGE_NAME = "nlp-refinement-cli"
 REQUIRED_COMMANDS = (
+    "nlp-refinement",
+)
+LEGACY_REQUIRED_COMMANDS = (
     "nlp-refinement",
     "nlp-refinement-host",
     "nlp-refinement-doe-prune",
@@ -138,6 +142,14 @@ def _wheel_filename(url: str, *, expected_version: str) -> str | None:
     return name if name == expected else None
 
 
+def _commands_for_release_schema(schema_version: object) -> tuple[str, ...] | None:
+    if schema_version == RELEASE_SCHEMA:
+        return REQUIRED_COMMANDS
+    if schema_version == LEGACY_RELEASE_SCHEMA:
+        return LEGACY_REQUIRED_COMMANDS
+    return None
+
+
 def _release_is_compatible(release: dict[str, object], plugin: tuple[str, str]) -> bool:
     plugin_record = release.get("plugin")
     wheel = release.get("wheel")
@@ -150,8 +162,9 @@ def _release_is_compatible(release: dict[str, object], plugin: tuple[str, str]) 
         or not isinstance(capability, dict)
     ):
         return False
+    expected_commands = _commands_for_release_schema(release.get("schema_version"))
     return (
-        release.get("schema_version") == RELEASE_SCHEMA
+        expected_commands is not None
         and release.get("package_name") == PACKAGE_NAME
         and isinstance(release.get("version"), str)
         and release.get("requires_python") == ">=3.11"
@@ -162,7 +175,7 @@ def _release_is_compatible(release: dict[str, object], plugin: tuple[str, str]) 
         and _is_sha256(wheel.get("sha256"))
         and isinstance(wheel.get("size_bytes"), int)
         and 0 < wheel["size_bytes"] <= 64 * 1024 * 1024
-        and tuple(commands) == REQUIRED_COMMANDS
+        and tuple(commands) == expected_commands
         and set(capability) == {"interface_version", "required_subcommands"}
         and capability.get("interface_version") == TUI_NATIVE_INTERFACE
         and isinstance(capability.get("required_subcommands"), list)
@@ -249,6 +262,8 @@ def run(
     version = release["version"]
     wheel = release["wheel"]
     assert isinstance(version, str) and isinstance(wheel, dict)
+    release_commands = _commands_for_release_schema(release.get("schema_version"))
+    assert release_commands is not None
     wheel_url = wheel["url"]
     wheel_sha256 = wheel["sha256"]
     wheel_size = wheel["size_bytes"]
@@ -258,7 +273,7 @@ def run(
         "cli_version": version,
         "plugin_version": plugin[1],
         "package_name": PACKAGE_NAME,
-        "commands": list(REQUIRED_COMMANDS),
+        "commands": list(release_commands),
         "wheel_sha256": wheel_sha256,
         "requires_confirmation": True,
         "next_action": "Rerun this same request with --apply only after the user confirms this exact version and hash.",
@@ -299,7 +314,7 @@ def run(
             return _blocked("PIP_INSTALL_FAILED", completed=["release-manifest-verified", "wheel-verified"])
 
     expected_dir = script_dir or _user_scripts_dir()
-    missing_scripts = [command for command in REQUIRED_COMMANDS if not (expected_dir / command).is_file()]
+    missing_scripts = [command for command in release_commands if not (expected_dir / command).is_file()]
     if missing_scripts:
         return {
             **_blocked("CLI_SCRIPT_MISSING", completed=["release-manifest-verified", "wheel-verified", "pip-installed"]),
@@ -308,7 +323,7 @@ def run(
         }
     mismatched = [
         command
-        for command in REQUIRED_COMMANDS
+        for command in release_commands
         if shutil.which(command) is None or Path(str(shutil.which(command))).resolve() != (expected_dir / command).resolve()
     ]
     if mismatched:
@@ -334,7 +349,7 @@ def run(
         "status": "INSTALLED",
         "cli_version": version,
         "plugin_version": plugin[1],
-        "commands": list(REQUIRED_COMMANDS),
+        "commands": list(release_commands),
         "interface_version": TUI_NATIVE_INTERFACE,
         "completed_stages": ["release-manifest-verified", "wheel-verified", "pip-installed", "commands-visible", "runtime-interface-verified"],
     }

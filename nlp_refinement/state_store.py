@@ -1247,7 +1247,14 @@ class StateStore:
             raise ValueError("tui child dispatch receipt schema is invalid")
         if receipt["role"] not in TUI_CHILD_ROLES:
             raise ValueError("tui child dispatch receipt role is invalid")
-        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", str(receipt["child_thread_id"])) is None:
+        # Codex generic children can be exposed as a UUID-like identifier or as
+        # a host-owned canonical task path such as ``/root/resume_proposer``.
+        # Preserve the host-returned handle exactly, but keep it bounded and
+        # content-free rather than accepting arbitrary display text.
+        if re.fullmatch(
+            r"(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,127}|/(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,127})(?:/[A-Za-z0-9][A-Za-z0-9._:-]{0,127})*)",
+            str(receipt["child_thread_id"]),
+        ) is None or len(str(receipt["child_thread_id"]).encode("utf-8")) > 256:
             raise ValueError("tui child dispatch receipt thread ID is invalid")
         for field in ("contract_sha256", "prompt_sha256"):
             if re.fullmatch(r"[a-f0-9]{64}", str(receipt[field])) is None:

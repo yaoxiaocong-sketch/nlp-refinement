@@ -94,7 +94,7 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
             self.assertEqual(result["status"], "PREPARED")
             self.assertEqual(manifest["wheel"]["sha256"], hashlib.sha256(wheel.read_bytes()).hexdigest())
             self.assertEqual(manifest["wheel"]["size_bytes"], len(wheel.read_bytes()))
-            self.assertEqual(manifest["schema_version"], "nlp-refinement-runtime-release/v2")
+            self.assertEqual(manifest["schema_version"], "nlp-refinement-runtime-release/v3")
             self.assertEqual(manifest["tui_native_capability"], {
                 "interface_version": "nlp-refinement-tui-native/v1",
                 "required_subcommands": list(self.prepare.TUI_NATIVE_SUBCOMMANDS),
@@ -168,7 +168,7 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
             version = "1.2.3"
             payload = wheel_bytes(version)
             release = {
-                "schema_version": "nlp-refinement-runtime-release/v2",
+                "schema_version": "nlp-refinement-runtime-release/v3",
                 "package_name": "nlp-refinement-cli",
                 "version": version,
                 "requires_python": ">=3.11",
@@ -178,7 +178,7 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
                     "sha256": hashlib.sha256(payload).hexdigest(),
                     "size_bytes": len(payload),
                 },
-                "commands": ["nlp-refinement", "nlp-refinement-host", "nlp-refinement-doe-prune"],
+                "commands": ["nlp-refinement"],
                 "tui_native_capability": {
                     "interface_version": "nlp-refinement-tui-native/v1",
                     "required_subcommands": list(self.prepare.TUI_NATIVE_SUBCOMMANDS),
@@ -219,7 +219,7 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
             version = "1.2.3"
             payload = wheel_bytes(version)
             release = {
-                "schema_version": "nlp-refinement-runtime-release/v2",
+                "schema_version": "nlp-refinement-runtime-release/v3",
                 "package_name": "nlp-refinement-cli",
                 "version": version,
                 "requires_python": ">=3.11",
@@ -229,7 +229,7 @@ class RuntimeReleasePreparationTests(unittest.TestCase):
                     "sha256": "0" * 64,
                     "size_bytes": len(payload),
                 },
-                "commands": ["nlp-refinement", "nlp-refinement-host", "nlp-refinement-doe-prune"],
+                "commands": ["nlp-refinement"],
                 "tui_native_capability": {
                     "interface_version": "nlp-refinement-tui-native/v1",
                     "required_subcommands": list(self.prepare.TUI_NATIVE_SUBCOMMANDS),

@@ -45,10 +45,9 @@ root.
   `READY` after the caller records the resolving evidence. `STALE` and final
   outcomes do not resume in place.
 - Contentful artifacts require `caller-attested-redacted`; this is a caller
-  declaration, not proof of safety. M8 may make an in-memory high-confidence
-  redacted model view, but the StateStore still rejects detected likely secrets
-  from caller-attested persistence. `system-metadata` is reserved for bounded
-  coordinator receipts.
+  declaration, not proof of safety. The StateStore still rejects detected
+  likely secrets from caller-attested persistence. `system-metadata` is
+  reserved for bounded workflow receipts.
 - Retention requires an exact preview-plan hash. After 30 days a final run and
   all of its plugin-owned ledger records are deleted. No scheduled background
   process runs this action automatically.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import redirect_stdout
 import io
 import json
 import hashlib
@@ -12,8 +12,7 @@ import time
 import unittest
 from pathlib import Path
 
-from nlp_refinement.host_refine import build_parser as build_host_parser
-from nlp_refinement.refine import build_parser, main, project_identity, project_key
+from nlp_refinement.refine import main, project_identity, project_key
 from unittest.mock import patch
 from nlp_refinement.state_store import StateStore
 
@@ -24,24 +23,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class RefineCommandTests(unittest.TestCase):
-    def test_external_host_review_does_not_expose_a_fixed_output_attestation_as_input(self) -> None:
-        parser = build_host_parser()
-        args = parser.parse_args(
-            [
-                "review", "--run-id", "run_1234567890ab", "--artifact-file", "artifact.md",
-                "--observed-snapshot-hash", SNAPSHOT,
-            ]
-        )
-        self.assertFalse(hasattr(args, "model_output_redaction_status"))
-        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            parser.parse_args(
-                [
-                    "review", "--run-id", "run_1234567890ab", "--artifact-file", "artifact.md",
-                    "--observed-snapshot-hash", SNAPSHOT,
-                    "--model-output-redaction-status", "caller-attested-redacted",
-                ]
-            )
-
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.temp_path = Path(self.temp_dir.name)

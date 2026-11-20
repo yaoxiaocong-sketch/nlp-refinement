@@ -3,92 +3,66 @@
 Display name: **NLP-refinement**
 Technical identifier: `nlp-refinement-cli`
 
-This repository contains M0, the protocol and fixture baseline; M1, a local
-SQLite ledger; M2, a review-only command adapter; and M3, structured external
-review-result ingestion for a local-first
-refinement loop over Skills, plugins, prompts, rules, agents, and their
-fixtures. M4 adds only a temporary-fixture repair feasibility DOE. M5 records
-human-only patch proposals. M6 makes the v5 NL finding taxonomy mandatory; M7
-adds finding-assessment and proposal-score contracts; M8 adds an optional
-standard-library Coordinator that asks the local Codex app-server for separate
-reviewer and proposal threads. No milestone modifies target artifacts.
+NLP-refinement is a local-first Codex Plugin for a human-only review and
+proposal workflow over natural-language-programming artifacts. Its supported
+flow is:
 
-## CLI installation
-
-The Plugin/Skill is an instruction and discovery surface. The local executable
-is a separately installed Python distribution; Plugin installation never
-installs it implicitly. For a published, configured release, the first
-`$nlp-refine-setup` setup flow may present a pinned CLI installation plan and, only
-after explicit user confirmation, download, verify, and install that exact
-wheel. The setup wrapper first checks all three CLI commands through `--version`
-and, for the TUI-native workflow, verifies `nlp-refinement runtime-identity`
-against the release-pinned interface and subcommand set. It treats an older or
-interface-incompatible command as incompatible rather than as a valid
-installation. A release configuration is valid only when its matching public
-GitHub Release manifest and wheel assets exist.
-
-Manual/offline installation remains supported:
-
-```sh
-python3 -m pip install --user /path/to/nlp_refinement_cli-0.11.0-py3-none-any.whl
+```text
+TUI root -> reviewer -> verified findings -> proposer -> independent assessor
+         -> human-only v6 proposal
 ```
 
-That distribution provides two deliberately separate execution commands plus a
-no-model DOE receipt-maintenance command:
+The TUI root creates three distinct generic child contexts. The local
+`nlp-refinement` CLI scans candidate artifacts, creates and queries the SQLite
+ledger, checks snapshots and schemas, builds controlled handoffs, and records
+the final proposal. It does not write target artifacts, apply a proposal,
+execute a diff, or start a controller, daemon, MCP bridge, or app-server.
+Every persisted proposal carries `no_target_write_attestation: true`; this is
+an auditable protocol boundary rather than an OS-sandbox claim.
+
+## Entry points
+
+Use the namespaced Plugin Skill in any target project:
+
+```text
+$nlp-refinement-cli:nlp-review-propose start
+$nlp-refinement-cli:nlp-review-propose resume
+```
+
+`start` lists the selectable NL artifacts before it creates a Batch. `resume`
+recovers verified facts from the ledger; it never relies on an old child
+transcript or scratch file.
+
+## Local CLI setup
+
+The Plugin distributes Skills and a pinned setup flow. The separately installed
+Python distribution supplies one public command:
 
 ```sh
 nlp-refinement --help
-nlp-refinement-host --help
-nlp-refinement-doe-prune --help
 ```
 
-`nlp-refinement` is the normal no-model command. Only the separately invoked
-`nlp-refinement-host` command may request the local Codex app-server after an
-explicit `--allow-model-inference` confirmation. Plugin retention covers only
-its SQLite ledger; Codex host session history follows Codex configuration. If either command is absent,
-stop and install the matching CLI; do not fall back to a source checkout,
-`PYTHONPATH`, or a guessed plugin-cache path.
+On first use, `$nlp-refinement-cli:nlp-refine-setup` may show a hash-pinned
+installation plan. It only downloads and installs after the user confirms that
+exact plan. A matching installed CLI must expose `runtime-identity` for the
+TUI-native interface; source checkout and guessed cache paths are not fallback
+runtime sources.
 
-See [first-use runtime bootstrap](docs/RUNTIME_BOOTSTRAP.md) for the plan,
-confirmation, hash-check, failure, and platform boundaries.
-See [PyPI Trusted Publishing](docs/PYPI_TRUSTED_PUBLISHING.md) for the
-manual-only public-package release path. Each version builds one wheel, which
-is first released on GitHub and then verified and published unchanged to PyPI;
-adding that workflow does not publish a package. The separate Linux source
-verification workflow has no PyPI authority.
-
-`nlp-refinement-doe-prune` is also a no-model command. It removes only expired,
-well-formed redacted M8 DOE failure receipts from its owner-only evidence root;
-it does not create a missing root or delete unknown files.
-
-Run the current validation suite with:
+## Verification
 
 ```sh
 python3 -m unittest discover -s tests -v
+python3 scripts/validate_m0_contract.py
 ```
 
-See the [M0 protocol](docs/M0_PROTOCOL.md) for the selected decisions and
-state-machine contract, and the [M1 StateStore](docs/M1_STATESTORE.md) for the
-implemented durable-local ledger boundary. See [M2 command adapter](docs/M2_COMMAND.md)
-for the runnable start/status/resume/retention boundary and [M3 review adapter](docs/M3_REVIEW_ADAPTER.md)
-for external review-result ingestion.
+The acceptance record is in
+[TUI native review/propose acceptance](docs/TUI_NATIVE_REVIEW_PROPOSE_ACCEPTANCE.md).
+It distinguishes verified protocol behavior from unverified host-enforced role
+binding, child cwd, and sandbox isolation.
 
-See [M6 finding taxonomy](docs/M6_FINDING_TAXONOMY.md) for the static,
-runtime-boundary, and evidence classifications accepted by review ingestion.
-See [M7 severity and score](docs/M7_FINDING_SEVERITY_AND_PROPOSAL_SCORE.md) for
-the independent finding assessment fields and proposal hard gates.
-See [M8 Host Coordinator](docs/M8_HOST_COORDINATOR.md) for the optional local
-app-server JSON-RPC executor, its receipts, and runtime-evidence limits.
+## Compatibility and history
 
-The [M4 repair feasibility DOE](docs/M4_REPAIR_FEASIBILITY_DOE.md) records
-observed local primitives and explicit non-proofs. It is not a repair feature.
-See [M5 human-only patch proposals](docs/M5_HUMAN_PATCH_PROPOSALS.md) for the
-manual-application boundary.
-
-## Contributing
-
-External contributors may propose changes by forking the repository and
-opening a Pull Request; they do not receive direct repository write or PyPI
-publication access. See [CONTRIBUTING.md](CONTRIBUTING.md) for the review and
-licence boundary. The root [LICENSE](LICENSE) and [NOTICE](NOTICE) declare the
-Apache-2.0 licence and copyright-holder notice for public distribution.
+Published `v0.11.0` release assets remain immutable historical evidence. The
+next TUI-only release uses a new versioned release-manifest schema; it does not
+reinterpret the old v2 three-command release record. See the
+[TUI-only decommission plan](docs/TUI_ONLY_DECOMMISSION_PLAN.md).

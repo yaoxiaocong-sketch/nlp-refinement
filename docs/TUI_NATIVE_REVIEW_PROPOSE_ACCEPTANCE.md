@@ -22,6 +22,19 @@
 
 These checks are runtime evidence only. They are not proven by unit tests.
 
+### Release-candidate revalidation
+
+The receipts below establish the protocol behavior of earlier feature wheels.
+They do not certify a newly built release candidate merely because its source
+passes the same tests. Before tagging or publishing any candidate, run M01, M03b,
+M04, M05, and M06 against the exact staged wheel named by the active versioned
+release manifest. Append only content-free
+receipts: terminal disposition, artifact IDs, contract digests, child IDs when
+the host exposes them, and explicit `unverified` values when it does not. The
+release candidate fails acceptance if it writes a target, starts a retired host
+path, accepts an invalid phase output, or requires an old child transcript to
+resume.
+
 | ID | Setup and action | Expected observation |
 | --- | --- | --- |
 | M01 | Invoke `$nlp-review-propose start` in a fixture project | Root shows the complete inventory and waits for a choice |
@@ -84,4 +97,21 @@ exposed by the TUI host and is recorded as `unverified`.
 The M01--M06 record above establishes the TUI workflow's ledger and protocol
 behavior. It does not upgrade the documented `unverified` fields into host
 guarantees.
+
+## Release-candidate revalidation receipts (0.12.2)
+
+The following receipt is tied to the staged
+`nlp_refinement_cli-0.12.2-py3-none-any.whl` with SHA-256
+`bc4b12804b5a9a0ade7467aaab33a8a131b00184c65c0ec431fdfb801260e38f`.
+It revalidates M01 and M03b through M06 against the exact 0.12.2 wheel.
+The candidate still requires a commit, review/merge decision, and separately
+authorized tag and publication steps before it can be released.
+
+| Check | Observed result |
+| --- | --- |
+| M04 fresh-root recovery | A fresh terminal Codex root started from the feature worktree resolved the 0.12.2 development descriptor, located the sole resumable Batch `batch_5f471034155adc0b8fa51e22` through the owner-local ledger, and resumed `run_3c4c0ba1419b57f1759e8cb5` without treating the source worktree as target authority. It retained review `r00000001-review`, recorded proposer handle `/root/resume_proposer` (contract `2a182ee88b259bd1e3b35bf3b738e0ed1e8b104caf2c2164683871f0f6389f90`, 618 bytes), then distinct assessor handle `/root/resume_assessor` (contract `c8cb19b93f416f65fcc47847cb4a8ac8e94e81cda024534b83ed86897c82469a`, 798 bytes). The root wrote exactly one v6 human-only proposal `r00000002-review`, reached `AWAITING_HUMAN`, left the target SHA-256 unchanged, reported zero target writes, and cleaned its transient directory. `observed_cwd`, `host_role_binding`, and `child_sandbox` remain `unverified`; this is ledger-and-contract evidence, not host-enforced role or sandbox evidence. |
+| M01 inventory-and-choice gate | A fresh root with the fixture as current TUI project root resolved the 0.12.2 descriptor and performed its read-only scan. It displayed exactly one numbered candidate, `AGENTS.md` (Markdown, 241 bytes), then stopped to request `1` or `all`. The configured state root did not exist afterward: no Batch, run, child context, model call, target write, or fixture execution occurred before the explicit selection. |
+| M03b three-child unsafe-artifact path | In an isolated target-root TUI session, a one-item `all` selection bound `AGENTS.md`. Reviewer `/root/reviewer` (contract `9ea8cecddf63ba0dbe2284a84125f3ac0a6599a6a77baa97465bd4c84182b267`, 612 bytes) recorded the direct-static conflict without executing the artifact's command text; proposer `/root/proposer` (contract `2a182ee88b259bd1e3b35bf3b738e0ed1e8b104caf2c2164683871f0f6389f90`, 614 bytes) and distinct assessor `/root/proposal_assessor` (contract `c8cb19b93f416f65fcc47847cb4a8ac8e94e81cda024534b83ed86897c82469a`, 794 bytes) produced exactly one human-only v6 proposal `r00000002-review` for run `run_29a3d00882add01defe5df8c`. It reached `AWAITING_HUMAN`, target SHA-256 remained `e86f0120e289b66e372922d7eb8db84a8d848ad79c7d800836719376c093f31b`, target writes were zero, and transient files were cleaned. |
+| M05 snapshot stale | A fresh terminal Codex root resolved the same 0.12.2 descriptor and located the sole resumable Batch `batch_a7ba8fa50080cc40ff678ebb`. Its ledger-backed review was accepted before an intentional change to `AGENTS.md`. On `resume`, root detected the hash mismatch, persisted `SNAPSHOT_STALE` for `run_650ac17ed191aff8ac17e180`, produced no child dispatch receipts, did not reuse the review, and reported zero target writes. |
+| M06 inherited sandbox boundary | The M04 and M05 terminal roots were explicitly launched with parent setting `-s workspace-write`. The M04 child receipts still persisted `child_sandbox: unverified`, `host_role_binding: unverified`, and `observed_cwd: unverified`; the M05 stale gate created no child. This observes only the root setting and proves no per-child sandbox, role binding, cwd, or approval-prompt behavior. |
 

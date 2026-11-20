@@ -23,12 +23,10 @@ import zipfile
 PACKAGE_NAME = "nlp-refinement-cli"
 PLUGIN_NAME = "nlp-refinement-cli"
 REPOSITORY = "yaoxiaocong-sketch/nlp-refinement"
-RELEASE_SCHEMA = "nlp-refinement-runtime-release/v2"
+RELEASE_SCHEMA = "nlp-refinement-runtime-release/v3"
 BOOTSTRAP_SCHEMA = "nlp-refinement-runtime-bootstrap/v1"
 REQUIRED_COMMANDS = (
     "nlp-refinement",
-    "nlp-refinement-host",
-    "nlp-refinement-doe-prune",
 )
 TUI_NATIVE_INTERFACE = "nlp-refinement-tui-native/v1"
 TUI_NATIVE_SUBCOMMANDS = (

@@ -31,7 +31,7 @@ class RuntimeBootstrapTests(unittest.TestCase):
         self.wheel_bytes = self.make_wheel("0.9.0")
         self.wheel_sha256 = hashlib.sha256(self.wheel_bytes).hexdigest()
         self.release = {
-            "schema_version": "nlp-refinement-runtime-release/v2",
+            "schema_version": "nlp-refinement-runtime-release/v3",
             "package_name": "nlp-refinement-cli",
             "version": "0.9.0",
             "requires_python": ">=3.11",
@@ -41,11 +41,7 @@ class RuntimeBootstrapTests(unittest.TestCase):
                 "sha256": self.wheel_sha256,
                 "size_bytes": len(self.wheel_bytes),
             },
-            "commands": [
-                "nlp-refinement",
-                "nlp-refinement-host",
-                "nlp-refinement-doe-prune",
-            ],
+            "commands": ["nlp-refinement"],
             "tui_native_capability": {
                 "interface_version": "nlp-refinement-tui-native/v1",
                 "required_subcommands": list(self.module.TUI_NATIVE_SUBCOMMANDS),
@@ -71,7 +67,7 @@ class RuntimeBootstrapTests(unittest.TestCase):
     def write_script_dir(root: Path) -> Path:
         script_dir = root / "scripts"
         script_dir.mkdir()
-        for command in ("nlp-refinement", "nlp-refinement-host", "nlp-refinement-doe-prune"):
+        for command in ("nlp-refinement",):
             (script_dir / command).write_text("fixture", encoding="utf-8")
         return script_dir
 
@@ -128,6 +124,15 @@ class RuntimeBootstrapTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "BLOCKED")
         self.assertEqual(result["code"], "RELEASE_MANIFEST_INCOMPATIBLE")
+
+    def test_legacy_v2_manifest_keeps_its_three_command_contract(self) -> None:
+        legacy = dict(self.release)
+        legacy["schema_version"] = self.module.LEGACY_RELEASE_SCHEMA
+        legacy["commands"] = list(self.module.LEGACY_REQUIRED_COMMANDS)
+
+        self.assertTrue(self.module._release_is_compatible(legacy, ("nlp-refinement-cli", "0.9.0")))
+        legacy["commands"] = ["nlp-refinement"]
+        self.assertFalse(self.module._release_is_compatible(legacy, ("nlp-refinement-cli", "0.9.0")))
 
     def test_apply_refuses_a_release_manifest_with_the_wrong_pinned_hash(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

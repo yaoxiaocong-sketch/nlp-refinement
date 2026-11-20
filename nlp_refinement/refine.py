@@ -24,7 +24,6 @@ from nlp_refinement.development_runtime import (
     runtime_identity as development_runtime_identity,
 )
 from nlp_refinement.patch_proposal_adapter import ingest_patch_proposal, load_patch_proposal
-from nlp_refinement.host_execution_request import HostExecutionRequest
 from nlp_refinement.review_adapter import ingest_review, load_review_result
 from nlp_refinement.sensitive_data import likely_secret_kind
 from nlp_refinement.state_store import FINAL_STATES, StateStore, StateStoreError
@@ -274,13 +273,6 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="caller attests that this content is already redacted; this is not an automatic safety proof",
     )
-    host_request = subcommands.add_parser(
-        "host-execution-request",
-        help="prepare a no-model request for the external host executor",
-    )
-    host_request.add_argument("--run-id", required=True)
-    host_request.add_argument("--artifact-file", type=Path, required=True)
-    host_request.add_argument("--observed-snapshot-hash", required=True)
     retention_preview = subcommands.add_parser("retention-preview", help="show a content-free retention plan without changing the ledger")
     retention_preview.add_argument("--now", type=int, help=argparse.SUPPRESS)
     retention_sweep = subcommands.add_parser("retention-sweep", help="apply one exact, previously previewed retention plan")
@@ -825,31 +817,6 @@ def patch_proposal(args: argparse.Namespace, store: StateStore) -> int:
     return 0
 
 
-def host_execution_request(args: argparse.Namespace, store: StateStore) -> int:
-    observed_snapshot = snapshot_hash(args.observed_snapshot_hash)
-    request = HostExecutionRequest(args.run_id, args.artifact_file, observed_snapshot)
-    run = store.get_run(request.run_id)
-    if run["state"] != "READY" or run["current_snapshot_hash"] != request.observed_snapshot_hash:
-        raise ValueError("host execution request requires a READY run at its current snapshot")
-    public = public_status(run, len(store.list_events(request.run_id)))
-    public.update(
-        {
-            "command": "host-execution-request",
-            "disposition": "HOST_EXECUTOR_REQUIRED",
-            "execution_request": {
-                "run_id": request.run_id,
-                "artifact_file": str(request.artifact_file),
-                "observed_snapshot_hash": request.observed_snapshot_hash,
-            },
-            "no_model_call_attestation": True,
-            "no_target_write_attestation": True,
-            "external_command": "nlp-refinement-host review --allow-model-inference --run-id <run-id> --artifact-file <artifact.md-or-json> --observed-snapshot-hash <sha256>",
-        }
-    )
-    output(public)
-    return 0
-
-
 def retention_preview(args: argparse.Namespace, store: StateStore) -> int:
     now = args.now if args.now is not None else now_epoch()
     plan = store.retention_preview(now)
@@ -939,8 +906,6 @@ def main(argv: list[str] | None = None) -> int:
             return review(args, store)
         if args.command == "patch-proposal":
             return patch_proposal(args, store)
-        if args.command == "host-execution-request":
-            return host_execution_request(args, store)
         if args.command == "retention-preview":
             return retention_preview(args, store)
         if args.command == "retention-sweep":

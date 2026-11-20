@@ -45,17 +45,14 @@ class PluginPackagingTests(unittest.TestCase):
         )
         self.assertFalse((ROOT / ".agents" / "skills" / "nlp-refine" / "SKILL.md").exists())
 
-    def test_authoritative_documents_describe_the_accepted_host_boundary(self) -> None:
-        for path in [
-            ROOT / "AGENTS.md",
-            ROOT / "docs" / "M8_HOST_COORDINATOR.md",
-        ]:
+    def test_authoritative_documents_describe_the_tui_native_boundary(self) -> None:
+        for path in [ROOT / "AGENTS.md", ROOT / "README.md"]:
             text = path.read_text(encoding="utf-8")
-            self.assertIn("requested `read-only`", text, path)
-            self.assertNotIn("records the user's model-inference authorization", text, path)
+            self.assertIn("human-only", text, path)
+            self.assertTrue("no target write" in text or "no_target_write" in text, path)
         agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        self.assertNotIn("`host-review`\n  may call", agents)
-        self.assertIn("`host-execution-request`", agents)
+        self.assertNotIn("host-execution-request", agents)
+        self.assertIn("does not create child threads", agents)
 
 
 if __name__ == "__main__":

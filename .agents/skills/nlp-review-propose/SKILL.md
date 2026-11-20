@@ -63,11 +63,12 @@ For every other request, explain that this Skill has only those two entries.
    `tui-child-contract --role <reviewer|proposer|proposal-assessor>` and the phase handoff builder, then call
    `tui-child-bootstrap <root> --run-id <run-id> --role <role>` (for assessor also pass its transient validated
    `--proposal-draft-file`). Pass only the returned `child_bootstrap.prompt` to `create_thread`; it is bounded
-   below 1,000 bytes and names exactly two read-only CLI commands. The child first runs those commands to retrieve
+   below 1,000 bytes and contains one root-generated read-only shell command that runs exactly two CLI retrieval calls. The child first runs that command to retrieve
    the complete generated `child_contract` and phase handoff verbatim, verifies the returned role and
    `contract_sha256`, and only then performs its role. After `create_thread` returns a child thread ID, the root
    must produce a `tui-child-dispatch-receipt/v1` before accepting that child's output or starting a dependent
-   phase. This root-attested protocol receipt records the role, child thread ID, `contract_sha256`,
+   phase. This root-attested protocol receipt records the role and the exact opaque child handle returned by
+   the host (for example, a UUID-like ID or a canonical task path such as `/root/resume_proposer`), `contract_sha256`,
    `prompt_sha256`, `prompt_utf8_bytes`, and `observed_cwd` (or `unverified`), and marks
    `host_role_binding` and `child_sandbox` as `unverified`. Treat the returned prompt as opaque: immediately
    before `create_thread`, recompute SHA-256 and byte count over the exact submitted text and stop if either

@@ -11,8 +11,8 @@ import tomllib
 from typing import Any
 
 
-INVENTORY_SCHEMA_VERSION = "1.0"
-_INVENTORY_DOMAIN = "nlp-refinement/artifact-inventory/v1\0"
+INVENTORY_SCHEMA_VERSION = "2.0"
+_SELECTION_DOMAIN = "nlp-refinement/candidate-selection/v2\0"
 _MAX_CANDIDATE_BYTES = 1_000_000
 _EXCLUDED_DIRECTORIES = frozenset({
     ".git", ".hg", ".svn", ".venv", "venv", "node_modules", "__pycache__",
@@ -101,16 +101,23 @@ def scan_artifact_inventory(root: Path) -> dict[str, Any]:
     visit(resolved_root)
     candidates.sort(key=lambda entry: str(entry["relative_path"]))
     excluded.sort(key=lambda entry: (entry["relative_path"], entry["reason"]))
-    canonical = {
+    inventory = {
         "schema_version": INVENTORY_SCHEMA_VERSION,
         "candidates": candidates,
         "excluded": excluded,
     }
+    # The selection confirmation binds only the selectable artifacts. Excluded
+    # entries are diagnostic data, not user-authorized review inputs; changes
+    # to them must not invalidate an already displayed choice.
+    selection = {
+        "schema_version": INVENTORY_SCHEMA_VERSION,
+        "candidates": candidates,
+    }
     inventory_hash = hashlib.sha256(
-        (_INVENTORY_DOMAIN + json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"))).encode("utf-8")
+        (_SELECTION_DOMAIN + json.dumps(selection, ensure_ascii=False, sort_keys=True, separators=(",", ":"))).encode("utf-8")
     ).hexdigest()
     return {
-        **canonical,
+        **inventory,
         "scan_status": "complete",
         "inventory_id": f"inv_{inventory_hash[:24]}",
         "inventory_hash": inventory_hash,

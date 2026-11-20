@@ -103,7 +103,8 @@ For every other request, explain that this Skill has only those two entries.
 ## 3. Start
 
 1. Run the read-only inventory scan for the current project root.
-2. If no candidates exist, show the excluded summary and stop without a Batch.
+2. If no candidates exist, show exactly `未发现可审查的 NL 工件。` and stop
+   without a Batch. Do not show excluded entries in the normal TUI flow.
 3. Display each candidate with a 1-based index (`1` through `N`), artifact
    type, relative path, byte count, SHA-256 prefix, and format status. The
    displayed index must be the exact index accepted by the selection parser.

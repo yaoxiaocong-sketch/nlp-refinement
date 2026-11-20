@@ -3,9 +3,9 @@
 ## Canonical interface
 
 M2's runnable interface is the separately installed `nlp-refinement` command, with
-`start`, `status`, and `resume` subcommands. The included `nlp-refine` Skill gives
-a future installed plugin an invocation surface, but this repository does not
-claim that every Codex host discovers it as `$nlp-refine` without installation and
+`start`, `status`, and `resume` subcommands. The included `$nlp-review-propose`
+Skill gives an installed plugin an invocation surface, but this repository does not
+claim that every Codex host discovers it as `$nlp-review-propose` without installation and
 host capability verification.
 
 `start` requires a target directory, a caller-supplied **redacted** brief, and
@@ -35,5 +35,5 @@ it cannot silently merge unrelated worktrees.
 ## Evidence boundary
 
 The M2 tests prove local command-to-SQLite behavior in temporary directories.
-They do not prove skill discovery, `$nlp-refine` registration, Codex lifecycle,
+They do not prove skill discovery, `$nlp-review-propose` registration, Codex lifecycle,
 MCP transport, review correctness, or target-worktree behavior.

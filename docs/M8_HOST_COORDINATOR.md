@@ -5,7 +5,7 @@ authority to repair an artifact.
 
 ## Deliberate architecture
 
-`$nlp-refine` is a Plugin/Skill **entry instruction** when the plugin is installed
+`$nlp-review-propose` is the Plugin/Skill **entry instruction** when the plugin is installed
 and discovered by a particular Codex host. It does not itself execute code.
 The runnable executor is:
 
@@ -250,7 +250,7 @@ succeeded.
 ## Separate diagnostic DOE
 
 `scripts/run_m8_host_diagnostic_doe.py` is a distinct, opt-in diagnosis tool,
-not a `$nlp-refine` command and not a normal host-review mode. It uses the same
+not a `$nlp-review-propose` command and not a normal host-review mode. It uses the same
 `M8ReviewCoordinator` and transport contract as production, but runs exactly one
 temporary attempt and keeps no SQLite ledger, raw JSONL, model text, prompt,
 or free-form host error after process exit. Its terminal report may contain

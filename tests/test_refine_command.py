@@ -496,6 +496,26 @@ class RefineCommandTests(unittest.TestCase):
         self.assertTrue(result["no_target_write_attestation"])
         self.assertFalse((self.state_root / "state.db").exists())
 
+    def test_batch_create_accepts_a_confirmed_selection_when_only_an_excluded_file_changes(self) -> None:
+        (self.target / "AGENTS.md").write_text("# stable candidate\n", encoding="utf-8")
+        (self.target / "notes.txt").write_text("initial excluded text\n", encoding="utf-8")
+        expected_inventory_hash = self.current_inventory_hash()
+        (self.target / "notes.txt").write_text("changed excluded text\n", encoding="utf-8")
+
+        created = self.invoke(
+            "batch-create",
+            str(self.target),
+            "--all",
+            "--expected-inventory-hash",
+            expected_inventory_hash,
+        )
+
+        self.assertEqual(created.returncode, 0, created.stderr)
+        result = json.loads(created.stdout)
+        self.assertEqual(result["command"], "batch-create")
+        self.assertIn("batch", result)
+        self.assertTrue((self.state_root / "state.db").exists())
+
     def test_batch_rejects_a_selection_outside_the_current_inventory_without_runs(self) -> None:
         (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
 

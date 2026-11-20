@@ -27,27 +27,27 @@ class PluginPackagingTests(unittest.TestCase):
             portable["extensions"]["com.openai"]["interface"],
             compatibility["interface"],
         )
-        self.assertEqual(compatibility["skills"], "./skills/")
-        self.assertTrue((ROOT / "skills" / "nlp-refine" / "SKILL.md").is_file())
+        self.assertEqual(compatibility["skills"], "./.agents/skills/")
+        self.assertTrue((ROOT / ".agents" / "skills" / "nlp-review-propose" / "SKILL.md").is_file())
+        self.assertFalse((ROOT / "skills" / "nlp-refine" / "SKILL.md").exists())
         self.assertEqual(
             portable["extensions"]["com.openai"]["onboardingSkill"],
-            "./skills/nlp-refine-setup/SKILL.md",
+            "./.agents/skills/nlp-refine-setup/SKILL.md",
         )
-        self.assertEqual(compatibility["onboardingSkill"], "./skills/nlp-refine-setup/SKILL.md")
-        self.assertTrue((ROOT / "skills" / "nlp-refine-setup" / "SKILL.md").is_file())
+        self.assertEqual(compatibility["onboardingSkill"], "./.agents/skills/nlp-refine-setup/SKILL.md")
+        self.assertTrue((ROOT / ".agents" / "skills" / "nlp-refine-setup" / "SKILL.md").is_file())
         self.assertTrue((ROOT / "runtime-bootstrap-config.json").is_file())
         self.assertTrue((ROOT / "scripts" / "nlp_refinement_runtime_setup.py").is_file())
-        self.assertIn("nlp-refine-setup", (ROOT / "skills" / "nlp-refine" / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertIn("$nlp-review-propose", compatibility["interface"]["defaultPrompt"][0])
         self.assertIn(
             "nlp_refinement_runtime_setup.py",
-            (ROOT / "skills" / "nlp-refine-setup" / "SKILL.md").read_text(encoding="utf-8"),
+            (ROOT / ".agents" / "skills" / "nlp-refine-setup" / "SKILL.md").read_text(encoding="utf-8"),
         )
         self.assertFalse((ROOT / ".agents" / "skills" / "nlp-refine" / "SKILL.md").exists())
 
     def test_authoritative_documents_describe_the_accepted_host_boundary(self) -> None:
         for path in [
             ROOT / "AGENTS.md",
-            ROOT / "skills" / "nlp-refine" / "SKILL.md",
             ROOT / "docs" / "M8_HOST_COORDINATOR.md",
         ]:
             text = path.read_text(encoding="utf-8")

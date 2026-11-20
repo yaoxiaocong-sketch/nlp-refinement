@@ -6,8 +6,8 @@ description: Set up the separately distributed NLP-refinement CLI after the user
 # NLP-refinement local-runtime setup
 
 This onboarding Skill configures the local Python CLI required by
-`$nlp-refine`. It is not a normal review command and must never start the
-Codex app-server or inspect a target artifact.
+`$nlp-review-propose`. It is not a normal review command and must never start
+the Codex app-server or inspect a target artifact.
 
 ## Required consent boundary
 
@@ -46,6 +46,6 @@ The bootstrap result is authoritative for this setup attempt:
   release-pinned TUI-native interface match the Plugin version; do not install
   anything.
 - `INSTALLED`: ask the user to start a fresh Codex session, then use
-  `$nlp-refine` normally.
+  `$nlp-review-propose` normally.
 - `BLOCKED`: show only its code, completed stages, and next action. Do not
   retry automatically or uninstall a possibly pre-existing CLI.

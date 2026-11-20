@@ -1,6 +1,6 @@
 # First-use local-runtime bootstrap
 
-`$nlp-refine` is the discovery and workflow entry point. The separately
+`$nlp-review-propose` is the workflow entry point. The separately
 distributed Python CLI is the executable component. The Plugin must not
 silently install Python code merely because a user invoked a Skill.
 

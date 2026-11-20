@@ -61,10 +61,10 @@ class ArtifactInventoryTests(unittest.TestCase):
 
         self.assertEqual(first, second)
         self.assertEqual(tree_digest(self.root), before)
-        self.assertEqual(first["schema_version"], "1.0")
+        self.assertEqual(first["schema_version"], "2.0")
         self.assertEqual(first["scan_status"], "complete")
         schema = json.loads(
-            (ROOT / "nlp_refinement/resources/schemas/inventory/v1/artifact-inventory.schema.json").read_text(encoding="utf-8")
+            (ROOT / "nlp_refinement/resources/schemas/inventory/v2/artifact-inventory.schema.json").read_text(encoding="utf-8")
         )
         self.assertEqual(VALIDATOR.validate_instance(first, schema), [])
         self.assertEqual(
@@ -90,6 +90,18 @@ class ArtifactInventoryTests(unittest.TestCase):
             ],
         )
         self.assertNotIn("content", json.dumps(first))
+
+    def test_selection_hash_ignores_excluded_entries_but_binds_candidate_content(self) -> None:
+        initial = scan_artifact_inventory(self.root)
+
+        (self.root / "notes.txt").write_text("changed excluded text\n", encoding="utf-8")
+        after_excluded_change = scan_artifact_inventory(self.root)
+        self.assertEqual(after_excluded_change["inventory_hash"], initial["inventory_hash"])
+        self.assertEqual(after_excluded_change["excluded"], initial["excluded"])
+
+        (self.root / "AGENTS.md").write_text("# Changed project rules\n", encoding="utf-8")
+        after_candidate_change = scan_artifact_inventory(self.root)
+        self.assertNotEqual(after_candidate_change["inventory_hash"], initial["inventory_hash"])
 
     def test_scan_rejects_a_symlink_root(self) -> None:
         alias = self.root.parent / "project-alias"

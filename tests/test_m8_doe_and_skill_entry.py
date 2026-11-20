@@ -103,12 +103,12 @@ class M8DoeAndSkillEntryTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 module["_write_new_private_report"](report, '{"status":"failed"}')
 
-    def test_nlp_refine_is_the_only_skill_call_name(self) -> None:
-        skill = ROOT / "skills" / "nlp-refine" / "SKILL.md"
+    def test_nlp_review_propose_is_the_only_public_workflow_skill(self) -> None:
+        skill = ROOT / ".agents" / "skills" / "nlp-review-propose" / "SKILL.md"
         self.assertTrue(skill.is_file())
-        self.assertFalse((ROOT / "skills" / "refine").exists())
-        self.assertIn("name: nlp-refine", skill.read_text(encoding="utf-8"))
-        self.assertIn("nlp-refinement scan <project-root>", skill.read_text(encoding="utf-8"))
+        self.assertFalse((ROOT / "skills" / "nlp-refine").exists())
+        self.assertIn("name: nlp-review-propose", skill.read_text(encoding="utf-8"))
+        self.assertIn("<cli> --state-root <state-root> scan <project-root>", skill.read_text(encoding="utf-8"))
 
         for path in [
             skill,
@@ -125,13 +125,9 @@ class M8DoeAndSkillEntryTests(unittest.TestCase):
         self.assertIn("V4 reviews natural-language-programming artifacts", taxonomy)
 
     def test_live_host_review_documents_its_execution_boundary(self) -> None:
-        for path in [
-            ROOT / "skills" / "nlp-refine" / "SKILL.md",
-            ROOT / "docs" / "M8_HOST_COORDINATOR.md",
-        ]:
-            text = path.read_text(encoding="utf-8")
-            self.assertIn("host-capable, non-sandboxed process", text, path)
-            self.assertIn("does not grant privileges", text, path)
+        text = (ROOT / "docs" / "M8_HOST_COORDINATOR.md").read_text(encoding="utf-8")
+        self.assertIn("host-capable, non-sandboxed process", text)
+        self.assertIn("does not grant privileges", text)
 
     def test_doe_success_does_not_retry_or_archive_a_receipt(self) -> None:
         module = runpy.run_path(str(ROOT / "scripts" / "run_m8_host_doe.py"))

@@ -18,7 +18,7 @@ reviewer and proposal threads. No milestone modifies target artifacts.
 The Plugin/Skill is an instruction and discovery surface. The local executable
 is a separately installed Python distribution; Plugin installation never
 installs it implicitly. For a published, configured release, the first
-`$nlp-refine` setup flow may present a pinned CLI installation plan and, only
+`$nlp-refine-setup` setup flow may present a pinned CLI installation plan and, only
 after explicit user confirmation, download, verify, and install that exact
 wheel. The setup wrapper first checks all three CLI commands through `--version`
 and, for the TUI-native workflow, verifies `nlp-refinement runtime-identity`

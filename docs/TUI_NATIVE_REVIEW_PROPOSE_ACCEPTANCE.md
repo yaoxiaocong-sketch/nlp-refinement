@@ -47,7 +47,7 @@ Before calling the feature TUI-native, retain:
 
 ## Defined pause conditions
 
-- Empty inventory: show excluded-summary information; create no Batch.
+- Empty inventory: show only `未发现可审查的 NL 工件。`; create no Batch.
 - User enters `cancel`: create no Batch or run.
 - Multiple resumable Batches: show a compact choice; do not guess.
 - Inventory or snapshot drift: stop the affected run and request a fresh

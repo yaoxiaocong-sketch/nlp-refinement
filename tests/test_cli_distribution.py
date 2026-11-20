@@ -52,10 +52,11 @@ class CliDistributionTests(unittest.TestCase):
         resource_root = ROOT / "nlp_refinement" / "resources"
         self.assertTrue((resource_root / "schemas" / "v5" / "review-result.schema.json").is_file())
         self.assertTrue((resource_root / "schemas" / "inventory" / "v1" / "artifact-inventory.schema.json").is_file())
+        self.assertTrue((resource_root / "schemas" / "inventory" / "v2" / "artifact-inventory.schema.json").is_file())
         self.assertTrue((resource_root / "prompts" / "review-phase.v5.md").is_file())
         self.assertEqual(
             package["tool"]["setuptools"]["package-data"]["nlp_refinement.resources"],
-            ["schemas/v5/*.json", "schemas/inventory/v1/*.json", "prompts/*.md"],
+            ["schemas/v5/*.json", "schemas/inventory/v1/*.json", "schemas/inventory/v2/*.json", "prompts/*.md"],
         )
 
     def test_normal_command_advertises_the_external_host_executable(self) -> None:

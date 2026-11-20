@@ -1,3 +1,3 @@
 """Single release version shared by all public command entrypoints."""
 
-CLI_VERSION = "0.10.0"
+CLI_VERSION = "0.11.0"

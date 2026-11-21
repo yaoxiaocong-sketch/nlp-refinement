@@ -37,7 +37,7 @@ class RuntimeReleaseConfigTests(unittest.TestCase):
 
     def test_source_tree_keeps_only_the_current_runtime_manifest(self) -> None:
         manifests = sorted(path.name for path in (ROOT / "releases").glob("*.json"))
-        self.assertEqual(manifests, ["nlp-refinement-runtime-0.12.2.json"])
+        self.assertEqual(manifests, ["nlp-refinement-runtime-0.13.0.json"])
 
 
 if __name__ == "__main__":

@@ -1,9 +1,8 @@
 # M0 Protocol Baseline
 
-> **Status:** legacy-compatible v5 protocol reference. It documents persisted
-> ledger semantics retained for compatibility; it is not the current user
-> workflow entrypoint. The supported workflow is the TUI-native sequence in
-> `AGENTS.md` and `TUI_NATIVE_REVIEW_PROPOSE_DECISION.md`.
+> **Status:** retained review-result/v5 protocol reference. Current durable
+> state is `tui-ledger/v1`; this document does not define a separate user
+> entrypoint or retain proposal v5 compatibility.
 
 ## 1. Goal and non-goals
 

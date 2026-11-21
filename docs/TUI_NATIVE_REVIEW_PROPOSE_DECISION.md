@@ -92,13 +92,10 @@ It only supplies a `ProposalHandoff` assembled from accepted StateStore data.
 
 ## Compatibility boundary
 
-The review-result contract remains the normative v5 contract unless a review
-semantic change separately warrants a new version. The proposal contract is
-versioned independently: this feature introduces `patch-proposal-result/v6`
-to bind the accepted review artifact explicitly. It must not import the
-uncommitted v6 schema from `experiment/host-dispatcher-doe` or reinterpret
-historical v5 ledger records; v6 is defined anew here with fixtures and a
-compatibility reader for retained v5 proposal artifacts.
+The review-result/v5 contract remains the current reviewer wire contract until
+a separately approved review-schema replacement. The proposal contract is
+current-only: `patch-proposal-result/v6` is the sole accepted final proposal
+shape and no v5 proposal reader is retained.
 
 ## Implementation surface
 
@@ -108,9 +105,7 @@ compatibility reader for retained v5 proposal artifacts.
 | `nlp_refinement/development_runtime.py` | Development-only absolute CLI identity and capability binding; no PATH search or installation |
 | `nlp_refinement/state_store.py` | Read-only project-scoped and active-Batch recovery queries needed by the workflow module |
 | `nlp_refinement/refine.py` | Narrow internal CLI/query adapters only if the Skill cannot call the module safely otherwise |
-| `.codex/agents/nlp-reviewer.toml` | Explicit review-only role with a JSON-only output contract |
-| `.codex/agents/nlp-proposer.toml` | Explicit draft-only role with a JSON-only output contract |
-| `.codex/agents/nlp-proposal-assessor.toml` | Explicit independent assessment role with a JSON-only output contract |
+| `nlp_refinement/tui_workflow.py` child-contract generator | Sole role-specific contract source for the three generic child contexts |
 | `.agents/skills/nlp-review-propose/` | Explicit-only TUI procedure, selection UX, gates, resume behavior, and summary format |
 | `tests/` and fixtures | Deterministic protocol and recovery coverage; separate manual TUI evidence |
 

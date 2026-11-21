@@ -62,8 +62,8 @@ binding, child cwd, and sandbox isolation.
 
 ## Compatibility and history
 
-Published release assets through `v0.11.0` remain immutable historical
-evidence. The current TUI-only `v0.12.2` release uses the v3 release-manifest
-schema and publishes only `nlp-refinement`; it does not reinterpret the old v2
-three-command release record. See the
-[TUI-only decommission record](docs/TUI_ONLY_DECOMMISSION_PLAN.md).
+The current source accepts only the TUI-only v3 release-manifest schema and
+publishes only `nlp-refinement`. Earlier tags, GitHub Releases, and PyPI
+distributions remain immutable external history, but are not supported runtime
+inputs for this source tree. See the
+[current-only decommission record](docs/TUI_ONLY_DECOMMISSION_PLAN.md).

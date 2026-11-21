@@ -1,8 +1,8 @@
 # M5 human-only patch proposals
 
-> **Status:** legacy-compatible low-level proposal-adapter reference. The
-> TUI workflow composes a v6 proposal only after an independent assessment,
-> then records it through this retained human-only boundary.
+> **Status:** current v6 low-level proposal-adapter reference. The TUI
+> workflow composes v6 only after an independent assessment; v5 proposal input
+> is not supported.
 
 ## Boundary
 

@@ -478,6 +478,8 @@ def parse_selection(value: str, candidates: list[str]) -> tuple[str, ...] | None
 
 
 def _proposal_artifact(artifact: dict[str, Any]) -> bool:
+    if artifact.get("kind") != "proposal":
+        return False
     try:
         value = json.loads(str(artifact["body"]))
     except (KeyError, TypeError, json.JSONDecodeError):

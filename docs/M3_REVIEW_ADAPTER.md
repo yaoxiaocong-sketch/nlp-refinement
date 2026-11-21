@@ -1,8 +1,7 @@
 # M3 Review Phase Adapter
 
-> **Status:** legacy-compatible adapter reference. The TUI workflow uses its
-> stricter transient-file handoff before recording a review; this document
-> remains the reference for the retained low-level review adapter.
+> **Status:** current low-level review-adapter reference. The TUI workflow
+> uses its stricter transient-file handoff before recording a review.
 
 ## Boundary
 

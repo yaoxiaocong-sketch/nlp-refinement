@@ -25,15 +25,9 @@ import zipfile
 
 
 RELEASE_SCHEMA = "nlp-refinement-runtime-release/v3"
-LEGACY_RELEASE_SCHEMA = "nlp-refinement-runtime-release/v2"
 PACKAGE_NAME = "nlp-refinement-cli"
 REQUIRED_COMMANDS = (
     "nlp-refinement",
-)
-LEGACY_REQUIRED_COMMANDS = (
-    "nlp-refinement",
-    "nlp-refinement-host",
-    "nlp-refinement-doe-prune",
 )
 MAX_RELEASE_MANIFEST_BYTES = 64 * 1024
 TUI_NATIVE_INTERFACE = "nlp-refinement-tui-native/v1"
@@ -145,8 +139,6 @@ def _wheel_filename(url: str, *, expected_version: str) -> str | None:
 def _commands_for_release_schema(schema_version: object) -> tuple[str, ...] | None:
     if schema_version == RELEASE_SCHEMA:
         return REQUIRED_COMMANDS
-    if schema_version == LEGACY_RELEASE_SCHEMA:
-        return LEGACY_REQUIRED_COMMANDS
     return None
 
 

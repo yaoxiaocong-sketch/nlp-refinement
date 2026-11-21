@@ -49,12 +49,10 @@ class SensitiveArtifactError(StateStoreError):
 DAY_SECONDS = 24 * 60 * 60
 STALE_AFTER_DAYS = 14
 HOT_ARTIFACT_DAYS = 30
+LEDGER_SCHEMA_VERSION = "tui-ledger/v1"
 
 TERMINAL_OUTCOMES = {
-    "PASS",
-    "PASS_WITH_ACCEPTED_RISK",
-    "NEEDS_USER_DECISION",
-    "NO_MATERIAL_DELTA",
+    "AWAITING_HUMAN",
     "SNAPSHOT_STALE",
     "BLOCKED",
     "CANCELLED",
@@ -62,20 +60,18 @@ TERMINAL_OUTCOMES = {
 }
 
 FINAL_STATES = {
-    "PASS",
-    "PASS_WITH_ACCEPTED_RISK",
-    "NO_MATERIAL_DELTA",
+    "AWAITING_HUMAN",
     "SNAPSHOT_STALE",
     "CANCELLED",
     "STALE",
 }
 
-ARTIFACT_KINDS = {"review", "repair", "verification", "decision", "integrity", "reclassification"}
-ARTIFACT_ACTORS = {"coordinator", "reviewer", "fixer", "verifier", "integrity-gate", "user"}
+ARTIFACT_KINDS = {"review", "proposal"}
+ARTIFACT_ACTORS = {"reviewer", "proposer", "proposal-assessor"}
 REDACTION_STATUSES = {"system-metadata", "caller-attested-redacted"}
 FINDING_SEVERITIES = {"P0", "P1", "P2", "P3"}
 FINDING_GATES = {"blocking", "needs-user-decision", "recordable-risk"}
-FINDING_STATUSES = {"open", "fixed", "verified", "retracted-with-evidence", "accepted-risk"}
+FINDING_STATUSES = {"open"}
 FINDING_SUBJECT_KINDS = {"nl_artifact", "nl_host_boundary"}
 FINDING_EVIDENCE_PLANES = {"static", "runtime", "hybrid"}
 FINDING_EVIDENCE_CONFIDENCE = {"E1-inferred", "E2-direct", "E3-corroborated"}
@@ -102,10 +98,8 @@ HOST_BOUNDARY_CATEGORIES = {
     "safety_behavior",
 }
 RUN_STATES = {
-    "DRAFT", "READY", "REVIEWING", "TRIAGING", "REPAIRING", "VERIFYING",
-    "REREVIEWING", "INTEGRITY_CHECK", "ROLLING_BACK", "SNAPSHOT_STALE",
-    "STALE", "PASS", "PASS_WITH_ACCEPTED_RISK", "NEEDS_USER_DECISION",
-    "NO_MATERIAL_DELTA", "BLOCKED", "CANCELLED",
+    "DRAFT", "READY", "TRIAGING", "AWAITING_HUMAN", "SNAPSHOT_STALE",
+    "STALE", "BLOCKED", "CANCELLED",
 }
 RUN_OUTCOMES = {"IN_PROGRESS"} | TERMINAL_OUTCOMES
 TUI_CHILD_ROLES = {"reviewer", "proposer", "proposal-assessor"}
@@ -180,15 +174,8 @@ def validate_finding_assessment(
 
 ALLOWED_TRANSITIONS = {
     "DRAFT": {"READY"},
-    "READY": {"REVIEWING"},
-    "REVIEWING": {"TRIAGING"},
-    "TRIAGING": {"REPAIRING", "NEEDS_USER_DECISION"},
-    "REPAIRING": {"VERIFYING"},
-    "VERIFYING": {"REREVIEWING", "ROLLING_BACK"},
-    "REREVIEWING": {"INTEGRITY_CHECK"},
-    "INTEGRITY_CHECK": {"PASS", "PASS_WITH_ACCEPTED_RISK", "NO_MATERIAL_DELTA", "NEEDS_USER_DECISION"},
-    "ROLLING_BACK": {"REVIEWING"},
-    "NEEDS_USER_DECISION": {"TRIAGING"},
+    "READY": {"TRIAGING"},
+    "TRIAGING": {"AWAITING_HUMAN"},
     "BLOCKED": {"READY"},
 }
 
@@ -224,16 +211,6 @@ class StateStore:
                 raise StateStoreError(
                     "legacy ledger data uses the retired archive table; export or remove it explicitly"
                 )
-            if "runs" in tables:
-                for row in connection.execute("SELECT run_id, run_json FROM runs"):
-                    try:
-                        version = json.loads(row["run_json"]).get("schema_version")
-                    except json.JSONDecodeError as error:
-                        raise StateStoreError("stored run JSON is invalid") from error
-                    if version != "5.0":
-                        raise StateStoreError(
-                            f"legacy ledger data for {row['run_id']} is unsupported; export or remove it explicitly"
-                        )
             if "batches" in tables:
                 batch_columns = {
                     row["name"] for row in connection.execute("PRAGMA table_info(batches)")
@@ -852,9 +829,9 @@ class StateStore:
                     content_hash, body, redaction_status, revision, created_at
                 ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (run_id, "review", "reviewer", self._dump(input_artifact_refs), self._digest(proposal_body), proposal_body, redaction_status, run["revision"] + 1, now),
+                (run_id, "proposal", "proposer", self._dump(input_artifact_refs), self._digest(proposal_body), proposal_body, redaction_status, run["revision"] + 1, now),
             )
-            artifact_id = f"r{int(cursor.lastrowid):08d}-review"
+            artifact_id = f"r{int(cursor.lastrowid):08d}-proposal"
             connection.execute("UPDATE artifacts SET artifact_id = ? WHERE sequence = ?", (artifact_id, cursor.lastrowid))
             for finding_id, finding in findings:
                 finding["evidence_refs"] = [*finding["evidence_refs"], artifact_id]
@@ -862,6 +839,8 @@ class StateStore:
                     "UPDATE findings SET finding_json = ?, updated_at = ? WHERE run_id = ? AND finding_id = ?",
                     (self._dump(finding), now, run_id, finding_id),
                 )
+            run["state"] = "AWAITING_HUMAN"
+            run["outcome"] = "AWAITING_HUMAN"
             updated = self._advance_run(connection, run, now)
             self._record_event(
                 connection,
@@ -1173,7 +1152,7 @@ class StateStore:
             raise ValueError("finding run_id must match target run")
         if finding["origin_severity"] not in FINDING_SEVERITIES:
             raise ValueError("finding origin_severity is invalid")
-        if finding["schema_version"] != "5.0":
+        if finding["schema_version"] != LEDGER_SCHEMA_VERSION:
             raise ValueError("finding schema_version is invalid")
         if finding["effective_gate"] not in FINDING_GATES:
             raise ValueError("finding effective_gate is invalid")
@@ -1211,31 +1190,30 @@ class StateStore:
     def _validate_new_run(run: dict[str, Any]) -> None:
         required = {
             "schema_version", "run_id", "project_key", "target_snapshot_hash",
-            "current_snapshot_hash", "authorization_mode", "state", "outcome",
-            "revision", "repair_cycle_count", "max_repair_cycles",
-            "open_high_risk_assumptions", "retention_policy_version",
+            "current_snapshot_hash", "state", "outcome", "revision",
+            "retention_policy_version",
         }
         missing = required - set(run)
         if missing:
             raise ValueError(f"run is missing required fields: {sorted(missing)}")
-        if run["schema_version"] != "5.0" or run["retention_policy_version"] != "5.0":
+        unexpected = set(run) - required
+        if unexpected:
+            raise ValueError(f"run has unexpected fields: {sorted(unexpected)}")
+        if (
+            run["schema_version"] != LEDGER_SCHEMA_VERSION
+            or run["retention_policy_version"] != LEDGER_SCHEMA_VERSION
+        ):
             raise ValueError("run schema or retention policy version is invalid")
         if re.fullmatch(r"run_[a-z0-9]{12,64}", str(run["run_id"])) is None:
             raise ValueError("run_id is invalid")
         for field in ("project_key", "target_snapshot_hash", "current_snapshot_hash"):
             if re.fullmatch(r"[a-f0-9]{64}", str(run[field])) is None:
                 raise ValueError(f"{field} is invalid")
-        if run["authorization_mode"] not in {"review-only", "bounded-repair", "repair-and-add-tests"}:
-            raise ValueError("authorization_mode is invalid")
         if run["state"] not in RUN_STATES or run["outcome"] not in RUN_OUTCOMES:
             raise ValueError("run state or outcome is invalid")
-        for field in ("revision", "repair_cycle_count", "open_high_risk_assumptions"):
+        for field in ("revision",):
             if not isinstance(run[field], int) or isinstance(run[field], bool) or run[field] < 0:
                 raise ValueError(f"{field} is invalid")
-        if not isinstance(run["max_repair_cycles"], int) or isinstance(run["max_repair_cycles"], bool) or not 1 <= run["max_repair_cycles"] <= 5:
-            raise ValueError("max_repair_cycles is invalid")
-        if run["repair_cycle_count"] > run["max_repair_cycles"]:
-            raise ValueError("repair_cycle_count exceeds max_repair_cycles")
         if run["state"] != "DRAFT" or run["outcome"] != "IN_PROGRESS" or run["revision"] != 0:
             raise ValueError("a new run must start at DRAFT revision 0 with IN_PROGRESS outcome")
 
@@ -1323,12 +1301,10 @@ class StateStore:
         outcomes = {str(child["outcome"]) for child in children}
         if "BLOCKED" in states:
             return "BLOCKED"
-        if "NEEDS_USER_DECISION" in states:
-            return "NEEDS_USER_DECISION"
         if states == {"CANCELLED"}:
             return "CANCELLED"
         if states <= FINAL_STATES:
-            return "COMPLETE" if outcomes <= {"PASS", "PASS_WITH_ACCEPTED_RISK", "NO_MATERIAL_DELTA"} else "PARTIAL"
+            return "COMPLETE" if outcomes <= {"AWAITING_HUMAN"} else "PARTIAL"
         return "READY" if states == {"READY"} else "DISPATCHING"
 
     @staticmethod

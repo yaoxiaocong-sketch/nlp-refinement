@@ -37,11 +37,10 @@ class CliDistributionTests(unittest.TestCase):
 
         resource_root = ROOT / "nlp_refinement" / "resources"
         self.assertTrue((resource_root / "schemas" / "v5" / "review-result.schema.json").is_file())
-        self.assertTrue((resource_root / "schemas" / "inventory" / "v1" / "artifact-inventory.schema.json").is_file())
         self.assertTrue((resource_root / "schemas" / "inventory" / "v2" / "artifact-inventory.schema.json").is_file())
         self.assertEqual(
             package["tool"]["setuptools"]["package-data"]["nlp_refinement.resources"],
-            ["schemas/v5/*.json", "schemas/inventory/v1/*.json", "schemas/inventory/v2/*.json", "prompts/*.md"],
+            ["schemas/v5/review-result.schema.json", "schemas/inventory/v2/*.json", "schemas/ledger/v1/*.json"],
         )
 
     def test_normal_command_does_not_expose_retired_host_execution(self) -> None:
@@ -61,8 +60,20 @@ class CliDistributionTests(unittest.TestCase):
             "nlp_refinement/m8_doe_fixtures.py",
             "nlp_refinement/m8_review_coordinator.py",
             "nlp_refinement/repair_feasibility.py",
+            "nlp_refinement/format_contracts.py",
+            "nlp_refinement/resources/schemas/inventory/v1/artifact-inventory.schema.json",
+            "nlp_refinement/resources/schemas/v5/patch-proposal-result.schema.json",
+            "nlp_refinement/resources/prompts/review-phase.v5.md",
+            "nlp_refinement/resources/prompts/patch-proposal-phase.v5.md",
+            "nlp_refinement/resources/prompts/patch-proposal-phase.v6.md",
             "nlp_refinement/resources/prompts/proposal-draft-phase.v1.md",
             "nlp_refinement/resources/prompts/proposal-assessment-phase.v1.md",
+            "contracts/v5/phase-output-contracts.json",
+            "fixtures/v5/format-contract-cases.json",
+            "fixtures/v5/patch-proposal-result.json",
+            ".codex/agents/nlp-reviewer.toml",
+            ".codex/agents/nlp-proposer.toml",
+            ".codex/agents/nlp-proposal-assessor.toml",
         )
         for relative_path in retired_paths:
             self.assertFalse((ROOT / relative_path).exists(), relative_path)

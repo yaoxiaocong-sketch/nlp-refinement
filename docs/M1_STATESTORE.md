@@ -1,8 +1,7 @@
 # M1 Durable-local StateStore
 
-> **Status:** legacy-compatible v5 ledger reference. Its storage invariants
-> remain relevant to retained records and the TUI workflow, but it is not a
-> standalone current-product operating guide.
+> **Status:** retained current-ledger reference. Development ledgers holding
+> unsupported historic proposal records are reset rather than migrated.
 
 ## Scope
 

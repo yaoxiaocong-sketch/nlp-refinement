@@ -1,8 +1,7 @@
 # M2 Review-only Command Adapter
 
-> **Status:** legacy low-level CLI reference. Normal users enter through
-> `$nlp-review-propose`; this document describes retained direct CLI protocol
-> commands rather than the current TUI happy path.
+> **Status:** low-level current CLI reference. Normal users enter through
+> `$nlp-review-propose`; this document is not the TUI happy-path procedure.
 
 ## Canonical interface
 

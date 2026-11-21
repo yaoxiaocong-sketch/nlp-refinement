@@ -51,8 +51,10 @@ nlp-refinement --help
   OS-level sandbox guarantee.
 - Resume restores ledger facts and verifies the current snapshot; it does not
   revive an old child context.
-- Preserve schema compatibility. Changing a persisted protocol requires a new
-  schema version and a migration decision; never reinterpret old records.
+- This development source tree is current-only: it does not retain readers for
+  retired protocol inputs. Preserve consistency for the retained protocol;
+  changing a persisted current record requires a new schema version and an
+  explicit migration or reset decision. Never silently reinterpret old records.
 
 ## Retention policy
 

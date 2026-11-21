@@ -21,4 +21,4 @@ license-files = ["LICENSE", "NOTICE"]
 include = ["nlp_refinement*"]
 
 [tool.setuptools.package-data]
-"nlp_refinement.resources" = ["schemas/v5/*.json", "schemas/inventory/v1/*.json", "schemas/inventory/v2/*.json", "prompts/*.md"]
+"nlp_refinement.resources" = ["schemas/v5/review-result.schema.json", "schemas/inventory/v2/*.json", "schemas/ledger/v1/*.json"]

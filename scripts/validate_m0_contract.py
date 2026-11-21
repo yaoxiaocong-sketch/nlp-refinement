@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from nlp_refinement.format_contracts import validate_format_contract_registry, validate_state_schema_parity
+from nlp_refinement import state_store
 
 SCHEMA_DIR = ROOT / "nlp_refinement" / "resources" / "schemas" / "v5"
 FIXTURE_DIR = ROOT / "fixtures" / "v5"
@@ -197,7 +197,7 @@ def validate_schema_documents() -> tuple[dict[str, dict[str, Any]], list[str]]:
         unsupported = set(schema) - SUPPORTED_KEYWORDS
         if unsupported:
             errors.append(f"{path.name}: unsupported root keywords {sorted(unsupported)}")
-    expected = {"run", "finding", "artifact", "phase-envelope", "retention-policy", "acceptance-trace", "review-result", "patch-proposal-result"}
+    expected = {"run", "finding", "artifact", "phase-envelope", "retention-policy", "acceptance-trace", "review-result"}
     missing = expected - set(schemas)
     if missing:
         errors.append(f"missing schemas: {sorted(missing)}")
@@ -329,6 +329,32 @@ def validate_policy_fixtures() -> list[str]:
     return errors
 
 
+def validate_state_schema_parity() -> list[str]:
+    """Ensure the retained v5 schema enums match StateStore authority."""
+    checks = (
+        ("artifact", "kind", state_store.ARTIFACT_KINDS),
+        ("artifact", "actor", state_store.ARTIFACT_ACTORS),
+        ("artifact", "redaction_status", state_store.REDACTION_STATUSES),
+        ("finding", "origin_severity", state_store.FINDING_SEVERITIES),
+        ("finding", "effective_gate", state_store.FINDING_GATES),
+        ("finding", "status", state_store.FINDING_STATUSES),
+        ("finding", "subject_kind", state_store.FINDING_SUBJECT_KINDS),
+        ("finding", "evidence_plane", state_store.FINDING_EVIDENCE_PLANES),
+        ("finding", "evidence_confidence", state_store.FINDING_EVIDENCE_CONFIDENCE),
+        ("finding", "impact_scope", state_store.FINDING_IMPACT_SCOPES),
+        ("finding", "claim_status", state_store.FINDING_CLAIM_STATUSES),
+        ("run", "state", state_store.RUN_STATES),
+        ("run", "outcome", state_store.RUN_OUTCOMES),
+    )
+    errors: list[str] = []
+    for schema_name, property_name, runtime_values in checks:
+        schema = load_json(SCHEMA_DIR / f"{schema_name}.schema.json")
+        values = schema.get("properties", {}).get(property_name, {}).get("enum")
+        if not isinstance(values, list) or set(values) != set(runtime_values):
+            errors.append(f"{schema_name}.{property_name} enum differs from StateStore")
+    return errors
+
+
 def validate_repository() -> list[str]:
     schemas, errors = validate_schema_documents()
     if errors:
@@ -339,10 +365,7 @@ def validate_repository() -> list[str]:
     errors.extend(validate_instance(review_result, schemas["review-result"], "review-result.json"))
     if isinstance(review_result, dict):
         errors.extend(validate_review_result(review_result))
-    errors.extend(validate_instance(load_json(FIXTURE_DIR / "patch-proposal-result.json"), schemas["patch-proposal-result"], "patch-proposal-result.json"))
     errors.extend(validate_policy_fixtures())
-    errors.extend(validate_format_contract_registry(ROOT))
-    errors.extend(validate_state_schema_parity(ROOT))
     return errors
 
 

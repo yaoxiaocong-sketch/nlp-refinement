@@ -2,9 +2,11 @@
 
 ## Status
 
-Accepted for feature implementation on `feature/tui-native-review-propose`.
-Runtime claims remain conditional until the manual TUI acceptance checks in
-`docs/TUI_NATIVE_REVIEW_PROPOSE_ACCEPTANCE.md` are recorded.
+Implemented and released in `v0.12.2`. The manual TUI acceptance and
+release-candidate receipts are recorded in
+`docs/TUI_NATIVE_REVIEW_PROPOSE_ACCEPTANCE.md`. The documented limits on
+host-enforced role binding, child cwd observability, and per-child sandbox
+isolation remain unchanged.
 
 ## Goal
 

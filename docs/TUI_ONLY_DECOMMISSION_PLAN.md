@@ -1,10 +1,10 @@
-# TUI-only Decommission Plan
+# TUI-only Decommission Record
 
 ## Status
 
-Proposed implementation contract.  This document is the review point before
-removing retired code.  It does not alter published releases, released wheels,
-tags, or their release manifests.
+Completed in `v0.12.2`. This document records the reviewed retirement scope
+and compatibility boundaries used for that release. It does not alter
+published releases, released wheels, tags, or their release manifests.
 
 ## Product charter
 
@@ -27,7 +27,7 @@ queries, and proposal persistence.  The Plugin distributes the namespaced
 
 ## Retired scope
 
-The next unreleased version must not ship or advertise:
+`v0.12.2` does not ship or advertise:
 
 - M4 disposable repair-feasibility DOE code, fixtures, tests, or documents;
 - M8 external-host coordination, local Codex app-server clients, host executor,
@@ -65,8 +65,8 @@ child contexts receiving controlled, role-specific contracts.
 
 ## Release-manifest versioning
 
-The retired commands are part of the semantic meaning of
-`nlp-refinement-runtime-release/v2`.  The next release uses
+The retired commands remain part of the semantic meaning of
+`nlp-refinement-runtime-release/v2`. `v0.12.2` uses
 `nlp-refinement-runtime-release/v3` with exactly one required command:
 
 ```json
@@ -74,9 +74,9 @@ The retired commands are part of the semantic meaning of
 ```
 
 The v3 wheel, manifest, bootstrap configuration, tag, GitHub Release, and
-PyPI upload must be created together in a separately authorized release step.
-This feature branch may implement and test v3 serialization/validation, but it
-must not pretend that the existing 0.11.0 v2 manifest describes the new source.
+PyPI upload were created together in separately authorized release steps. The
+existing 0.11.0 v2 manifest continues to describe its historical release, not
+the current source.
 
 ## Acceptance map
 
@@ -90,7 +90,7 @@ must not pretend that the existing 0.11.0 v2 manifest describes the new source.
 | No target write | Existing human-only/no-target-write tests and manual TUI acceptance receipt. |
 | Old ledger safety | A fixture containing a historical M8 receipt can be queried and retained/purged safely, or an explicit 0.11-only migration document blocks deletion until this is added. |
 
-## Implementation order
+## Completed implementation sequence
 
 1. Add the red tests for the single public command, v3 manifest semantics, and
    absent retired runtime surface.

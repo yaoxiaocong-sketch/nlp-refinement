@@ -1,5 +1,9 @@
 # M5 human-only patch proposals
 
+> **Status:** legacy-compatible low-level proposal-adapter reference. The
+> TUI workflow composes a v6 proposal only after an independent assessment,
+> then records it through this retained human-only boundary.
+
 ## Boundary
 
 M5 records a pre-redacted, external unified-diff **proposal** for a human to

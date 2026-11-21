@@ -1,5 +1,9 @@
 # M1 Durable-local StateStore
 
+> **Status:** legacy-compatible v5 ledger reference. Its storage invariants
+> remain relevant to retained records and the TUI workflow, but it is not a
+> standalone current-product operating guide.
+
 ## Scope
 
 M1 implements local SQLite persistence for run metadata, immutable anchors,

@@ -1,8 +1,12 @@
 # M6 Finding Taxonomy
 
+> **Status:** legacy-compatible v5 taxonomy reference. It remains applicable
+> to the retained review-result/v5 protocol but is not a separate workflow
+> entrypoint.
+
 ## Scope
 
-V4 reviews natural-language-programming artifacts: JSON, Markdown, prompts,
+The retained v5 review protocol covers natural-language-programming artifacts:
 manifests, rules, Skills, Agents, Commands, and their fixtures. It does not
 review Python, JavaScript, Swift, Shell, database, operating-system, or host
 implementation defects as NL findings.
@@ -42,6 +46,6 @@ gate, invariant, subject kind, evidence plane, and category. A changed label
 is rejected rather than treated as a new, lower-priority concern. This keeps
 the taxonomy from being used for priority laundering.
 
-V4 has no earlier-version compatibility reader. If a local ledger contains an earlier run,
+The retained v5 protocol has no earlier-version compatibility reader. If a local ledger contains an earlier run,
 the StateStore stops with an explicit legacy-ledger error; it never overwrites,
 migrates, or silently reinterprets that run.

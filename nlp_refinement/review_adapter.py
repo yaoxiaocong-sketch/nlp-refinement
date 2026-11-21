@@ -116,8 +116,6 @@ def ingest_review(
     """Validate, append, and triage a review result without invoking a model."""
     validate_review_result(review_result)
     run = store.get_run(run_id)
-    if run["authorization_mode"] != "review-only":
-        raise ReviewInputError("M3 accepts only review-only runs")
     if run["state"] != "READY":
         raise ReviewInputError(f"M3 review requires READY state, found {run['state']}")
 
@@ -151,7 +149,7 @@ def ingest_review(
             existing = existing_by_fingerprint.get(incoming["fingerprint"])
             if existing is None:
                 finding = {
-                    "schema_version": "5.0",
+                    "schema_version": "tui-ledger/v1",
                     "finding_id": _next_finding_id(existing_findings),
                     "run_id": run_id,
                     "fingerprint": incoming["fingerprint"],

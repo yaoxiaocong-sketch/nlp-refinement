@@ -43,19 +43,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _run(run_id: str, key: str, snapshot: str) -> dict[str, object]:
     return {
-        "schema_version": "5.0",
+        "schema_version": "tui-ledger/v1",
         "run_id": run_id,
         "project_key": key,
         "target_snapshot_hash": snapshot,
         "current_snapshot_hash": snapshot,
-        "authorization_mode": "review-only",
         "state": "DRAFT",
         "outcome": "IN_PROGRESS",
         "revision": 0,
-        "repair_cycle_count": 0,
-        "max_repair_cycles": 3,
-        "open_high_risk_assumptions": 0,
-        "retention_policy_version": "5.0",
+        "retention_policy_version": "tui-ledger/v1",
     }
 
 
@@ -116,28 +112,6 @@ class TuiWorkflowTests(unittest.TestCase):
         with self.assertRaises(SelectionInputError):
             parse_selection("1,4", candidates)
 
-    def test_reviewer_role_states_the_closed_v5_output_contract(self) -> None:
-        role = (ROOT / ".codex/agents/nlp-reviewer.toml").read_text(encoding="utf-8")
-        self.assertIn("`schema_version`, `phase_name`, `reviewer_id`, `summary`, `findings`", role)
-        self.assertIn("do not emit `run_id`", role)
-        self.assertIn('category: "safety_and_governance"', role)
-        self.assertIn("Do not use invented labels", role)
-
-    def test_proposer_role_states_the_closed_draft_output_contract(self) -> None:
-        role = (ROOT / ".codex/agents/nlp-proposer.toml").read_text(encoding="utf-8")
-        self.assertIn("`schema_version`, `phase_name`, `proposer_id`, `summary`, `base_snapshot_hash`", role)
-        self.assertIn("do not emit `run_id`, `snapshot_hash`, `items`", role)
-        self.assertIn("`causal_evidence_refs`", role)
-        self.assertIn("JSON boolean `true`", role)
-
-    def test_assessor_role_states_the_closed_assessment_output_contract(self) -> None:
-        role = (ROOT / ".codex/agents/nlp-proposal-assessor.toml").read_text(encoding="utf-8")
-        self.assertIn("`schema_version`, `phase_name`, `assessor_id`, `draft_sha256`", role)
-        self.assertIn("do not emit `proposer_id`, `run_id`,", role)
-        self.assertIn("`summary`, `score`", role)
-        self.assertIn("`coverage` (0–20)", role)
-        self.assertIn("`runtime_effectiveness` is exactly `unverified`", role)
-
     def test_child_contracts_are_closed_and_derived_from_the_phase_validators(self) -> None:
         proposer = build_child_contract("proposer")
         self.assertEqual(proposer["contract_version"], "tui-child-contract/v6")
@@ -168,6 +142,7 @@ class TuiWorkflowTests(unittest.TestCase):
                 "no_target_write_attestation": True,
             },
         )
+
         self.assertEqual(
             proposer["field_constraints"]["proposals"],
             {
@@ -266,6 +241,13 @@ class TuiWorkflowTests(unittest.TestCase):
         self.assertIn("P0 requires effective_gate blocking", " ".join(reviewer["semantic_requirements"]))
         with self.assertRaisesRegex(WorkflowStateError, "unsupported child role"):
             build_child_contract("repairer")
+
+    def test_patch_proposal_rejects_retired_v5_schema(self) -> None:
+        proposal = json.loads((ROOT / "fixtures/v6/patch-proposal-result.json").read_text(encoding="utf-8"))
+        proposal["schema_version"] = "5.0"
+        del proposal["review_artifact_id"]
+        with self.assertRaises(PatchProposalInputError):
+            validate_patch_proposal(proposal)
 
     def test_bootstrap_is_bounded_and_retrieves_the_complete_contract_and_handoff_read_only(self) -> None:
         reviewer_handoff = build_reviewer_handoff(self.store, self.root, self.run_id)

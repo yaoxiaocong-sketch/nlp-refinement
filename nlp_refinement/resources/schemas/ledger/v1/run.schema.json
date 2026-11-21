@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TUI ledger run v1",
+  "type": "object",
+  "required": ["schema_version", "run_id", "project_key", "target_snapshot_hash", "current_snapshot_hash", "state", "outcome", "revision", "retention_policy_version"],
+  "properties": {
+    "schema_version": {"const": "tui-ledger/v1"},
+    "run_id": {"type": "string", "pattern": "^run_[a-z0-9]{12,64}$"},
+    "project_key": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "target_snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "current_snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "state": {"enum": ["DRAFT", "READY", "TRIAGING", "AWAITING_HUMAN", "SNAPSHOT_STALE", "STALE", "BLOCKED", "CANCELLED"]},
+    "outcome": {"enum": ["IN_PROGRESS", "AWAITING_HUMAN", "SNAPSHOT_STALE", "BLOCKED", "CANCELLED", "STALE"]},
+    "revision": {"type": "integer", "minimum": 0},
+    "retention_policy_version": {"const": "tui-ledger/v1"}
+  },
+  "additionalProperties": false
+}

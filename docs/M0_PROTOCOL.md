@@ -1,5 +1,9 @@
 # M0 Protocol Baseline
 
+> **Status:** retained v5 ledger and review-protocol reference for the current
+> workflow. It does not retain proposal v5 compatibility or define a separate
+> user entrypoint.
+
 ## 1. Goal and non-goals
 
 M0 establishes the versioned, testable contract for `NLP-refinement`. The

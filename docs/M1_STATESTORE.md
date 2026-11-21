@@ -1,5 +1,8 @@
 # M1 Durable-local StateStore
 
+> **Status:** retained current-ledger reference. Development ledgers holding
+> unsupported historic proposal records are reset rather than migrated.
+
 ## Scope
 
 M1 implements local SQLite persistence for run metadata, immutable anchors,

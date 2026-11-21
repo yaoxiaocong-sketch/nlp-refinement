@@ -1,5 +1,8 @@
 # M2 Review-only Command Adapter
 
+> **Status:** low-level current CLI reference. Normal users enter through
+> `$nlp-review-propose`; this document is not the TUI happy-path procedure.
+
 ## Canonical interface
 
 M2's runnable interface is the separately installed `nlp-refinement` command, with

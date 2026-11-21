@@ -35,16 +35,9 @@ class RuntimeReleaseConfigTests(unittest.TestCase):
         self.assertEqual(release["tui_native_capability"]["interface_version"], "nlp-refinement-tui-native/v1")
         self.assertIn("runtime-identity", release["tui_native_capability"]["required_subcommands"])
 
-    def test_historical_v2_manifest_retains_its_original_three_command_meaning(self) -> None:
-        historical = json.loads(
-            (ROOT / "releases" / "nlp-refinement-runtime-0.11.0.json").read_text(encoding="utf-8")
-        )
-
-        self.assertEqual(historical["schema_version"], "nlp-refinement-runtime-release/v2")
-        self.assertEqual(
-            historical["commands"],
-            ["nlp-refinement", "nlp-refinement-host", "nlp-refinement-doe-prune"],
-        )
+    def test_source_tree_keeps_only_the_current_runtime_manifest(self) -> None:
+        manifests = sorted(path.name for path in (ROOT / "releases").glob("*.json"))
+        self.assertEqual(manifests, ["nlp-refinement-runtime-0.12.2.json"])
 
 
 if __name__ == "__main__":

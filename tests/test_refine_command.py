@@ -544,13 +544,8 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(store.get_batch(created["batch_id"])["status"], "READY")
         current = store.get_run(child_run_id)
         for next_state, next_outcome, timestamp in (
-            ("REVIEWING", "IN_PROGRESS", 104),
-            ("TRIAGING", "IN_PROGRESS", 105),
-            ("REPAIRING", "IN_PROGRESS", 106),
-            ("VERIFYING", "IN_PROGRESS", 107),
-            ("REREVIEWING", "IN_PROGRESS", 108),
-            ("INTEGRITY_CHECK", "IN_PROGRESS", 109),
-            ("PASS", "PASS", 110),
+            ("TRIAGING", "IN_PROGRESS", 104),
+            ("AWAITING_HUMAN", "AWAITING_HUMAN", 105),
         ):
             current = store.transition(
                 child_run_id,
@@ -719,13 +714,8 @@ class RefineCommandTests(unittest.TestCase):
         lease = store.acquire_lease(run_id, f"pass-{run_id}", now=start_at, ttl_seconds=60)
         for offset, (next_state, next_outcome) in enumerate(
             (
-                ("REVIEWING", "IN_PROGRESS"),
                 ("TRIAGING", "IN_PROGRESS"),
-                ("REPAIRING", "IN_PROGRESS"),
-                ("VERIFYING", "IN_PROGRESS"),
-                ("REREVIEWING", "IN_PROGRESS"),
-                ("INTEGRITY_CHECK", "IN_PROGRESS"),
-                ("PASS", "PASS"),
+                ("AWAITING_HUMAN", "AWAITING_HUMAN"),
             ),
             start=1,
         ):
@@ -738,7 +728,7 @@ class RefineCommandTests(unittest.TestCase):
                 run["current_snapshot_hash"],
                 now=start_at + offset,
             )
-        store.release_lease(run_id, lease["token"], now=start_at + 8)
+        store.release_lease(run_id, lease["token"], now=start_at + 3)
 
     def write_review_result(
         self,
@@ -809,11 +799,12 @@ class RefineCommandTests(unittest.TestCase):
         proposal.write_text(
             json.dumps(
                 {
-                    "schema_version": "5.0",
+                    "schema_version": "6.0",
                     "phase_name": "patch-proposal",
                     "proposer_id": "fixture-reviewer",
                     "summary": "A human must inspect and apply this proposal outside NLP-refinement.",
                     "base_snapshot_hash": SNAPSHOT,
+                    "review_artifact_id": "r00000001-review",
                     "no_target_write_attestation": True,
                     "proposals": [
                         {
@@ -951,7 +942,7 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(artifacts[-1]["kind"], "review")
         self.assertEqual(artifacts[-1]["redaction_status"], "caller-attested-redacted")
         finding = StateStore(self.state_root / "state.db").list_findings(str(started["run_id"]))[0]
-        self.assertEqual(finding["schema_version"], "5.0")
+        self.assertEqual(finding["schema_version"], "tui-ledger/v1")
         self.assertEqual(finding["subject_kind"], "nl_artifact")
         self.assertEqual(finding["evidence_plane"], "static")
         self.assertEqual(finding["category"], "format_and_encoding")
@@ -1048,7 +1039,7 @@ class RefineCommandTests(unittest.TestCase):
             2,
             lease["token"],
             {
-                "schema_version": "5.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
+                "schema_version": "tui-ledger/v1", "finding_id": "F-001", "run_id": str(started["run_id"]),
                 "fingerprint": "a" * 64, "origin_severity": "P1", "effective_gate": "blocking",
                 "status": "open", "invariant_id": "I-REVIEW", "evidence_refs": [artifact["artifact_id"]],
                 "repeat_count": 0, "last_probe": "review-probe-001",
@@ -1102,14 +1093,14 @@ class RefineCommandTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         public = json.loads(completed.stdout)
-        self.assertEqual(public["state"], "TRIAGING")
+        self.assertEqual(public["state"], "AWAITING_HUMAN")
         self.assertEqual(public["proposal_count"], 1)
         self.assertTrue(public["no_target_write_attestation"])
         self.assertEqual(public["recommended_proposal_count"], 1)
         self.assertEqual(target_before.read_text(encoding="utf-8"), "original target bytes")
         store = StateStore(self.state_root / "state.db")
         artifacts = store.list_artifacts(str(started["run_id"]))
-        self.assertEqual(artifacts[-1]["kind"], "review")
+        self.assertEqual(artifacts[-1]["kind"], "proposal")
         self.assertIn('"artifact_role":"patch-proposal"', artifacts[-1]["body"])
         self.assertIn("should-not-exist", artifacts[-1]["body"])
         self.assertFalse((self.temp_path / "should-not-exist").exists())
@@ -1171,7 +1162,7 @@ class RefineCommandTests(unittest.TestCase):
             str(started["run_id"]), 1, lease["token"], "review", "reviewer", "seed evidence", now=1_001,
         )
         seed = {
-            "schema_version": "5.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
+            "schema_version": "tui-ledger/v1", "finding_id": "F-001", "run_id": str(started["run_id"]),
             "fingerprint": "a" * 64, "origin_severity": "P1", "effective_gate": "blocking",
             "status": "open", "invariant_id": "I-REVIEW", "evidence_refs": [artifact["artifact_id"]],
             "repeat_count": 1, "last_probe": "review-probe-001",
@@ -1201,7 +1192,7 @@ class RefineCommandTests(unittest.TestCase):
         store.record_finding(
             str(started["run_id"]), 2, lease["token"],
             {
-                "schema_version": "5.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
+                "schema_version": "tui-ledger/v1", "finding_id": "F-001", "run_id": str(started["run_id"]),
                 "fingerprint": "a" * 64, "origin_severity": "P1", "effective_gate": "blocking",
                 "status": "open", "invariant_id": "I-REVIEW", "evidence_refs": [artifact["artifact_id"]],
                 "repeat_count": 0, "last_probe": "review-probe-001",
@@ -1229,7 +1220,7 @@ class RefineCommandTests(unittest.TestCase):
         store.record_finding(
             str(started["run_id"]), 2, lease["token"],
             {
-                "schema_version": "5.0", "finding_id": "F-001", "run_id": str(started["run_id"]),
+                "schema_version": "tui-ledger/v1", "finding_id": "F-001", "run_id": str(started["run_id"]),
                 "fingerprint": "a" * 64, "origin_severity": "P1", "effective_gate": "blocking",
                 "status": "open", "invariant_id": "I-REVIEW", "evidence_refs": [artifact["artifact_id"]],
                 "repeat_count": 0, "last_probe": "review-probe-001",

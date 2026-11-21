@@ -1,5 +1,8 @@
 # M3 Review Phase Adapter
 
+> **Status:** current low-level review-adapter reference. The TUI workflow
+> uses its stricter transient-file handoff before recording a review.
+
 ## Boundary
 
 M3 does not call a model. The TUI reviewer contract or another external human

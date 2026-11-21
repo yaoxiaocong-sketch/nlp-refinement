@@ -1,6 +1,9 @@
 # M7 Finding Severity and Proposal Score
 
-V4 preserves `origin_severity` and `effective_gate`, and adds
+> **Status:** current v5/v6 scoring reference. The TUI workflow uses these
+> semantics through validated contracts and exposes no separate user entrypoint.
+
+The current protocol preserves `origin_severity` and `effective_gate`, and adds
 `evidence_confidence`, `impact_scope`, and `claim_status`. Severity describes
 consequence if true; it is not evidence strength. P0 is blocking with E2/E3
 evidence, P1 is never recordable only, P2 is never blocking, and P3 is always

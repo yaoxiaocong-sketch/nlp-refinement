@@ -125,13 +125,11 @@ class RuntimeBootstrapTests(unittest.TestCase):
         self.assertEqual(result["status"], "BLOCKED")
         self.assertEqual(result["code"], "RELEASE_MANIFEST_INCOMPATIBLE")
 
-    def test_legacy_v2_manifest_keeps_its_three_command_contract(self) -> None:
+    def test_legacy_v2_manifest_is_rejected(self) -> None:
         legacy = dict(self.release)
-        legacy["schema_version"] = self.module.LEGACY_RELEASE_SCHEMA
-        legacy["commands"] = list(self.module.LEGACY_REQUIRED_COMMANDS)
+        legacy["schema_version"] = "nlp-refinement-runtime-release/v2"
+        legacy["commands"] = ["nlp-refinement", "nlp-refinement-host", "nlp-refinement-doe-prune"]
 
-        self.assertTrue(self.module._release_is_compatible(legacy, ("nlp-refinement-cli", "0.9.0")))
-        legacy["commands"] = ["nlp-refinement"]
         self.assertFalse(self.module._release_is_compatible(legacy, ("nlp-refinement-cli", "0.9.0")))
 
     def test_apply_refuses_a_release_manifest_with_the_wrong_pinned_hash(self) -> None:

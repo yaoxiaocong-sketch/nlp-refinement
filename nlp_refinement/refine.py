@@ -26,7 +26,7 @@ from nlp_refinement.development_runtime import (
 from nlp_refinement.patch_proposal_adapter import ingest_patch_proposal, load_patch_proposal
 from nlp_refinement.review_adapter import ingest_review, load_review_result
 from nlp_refinement.sensitive_data import likely_secret_kind
-from nlp_refinement.state_store import FINAL_STATES, StateStore, StateStoreError
+from nlp_refinement.state_store import LEDGER_SCHEMA_VERSION, FINAL_STATES, StateStore, StateStoreError
 from nlp_refinement.version import CLI_VERSION
 
 
@@ -308,19 +308,15 @@ def start(args: argparse.Namespace, store: StateStore) -> int:
     identity, identity_mode = project_identity(args.project_dir, args.project_id)
     run_id = f"run_{secrets.token_hex(12)}"
     run = {
-        "schema_version": "5.0",
+        "schema_version": LEDGER_SCHEMA_VERSION,
         "run_id": run_id,
         "project_key": project_key(identity),
         "target_snapshot_hash": observed_snapshot,
         "current_snapshot_hash": observed_snapshot,
-        "authorization_mode": "review-only",
         "state": "DRAFT",
         "outcome": "IN_PROGRESS",
         "revision": 0,
-        "repair_cycle_count": 0,
-        "max_repair_cycles": 3,
-        "open_high_risk_assumptions": 0,
-        "retention_policy_version": "5.0",
+        "retention_policy_version": LEDGER_SCHEMA_VERSION,
     }
     created_at = now_epoch()
     store.create_run(
@@ -384,7 +380,7 @@ def batch_create(args: argparse.Namespace, store: StateStore) -> int:
     for candidate in selected:
         run_id = f"run_{secrets.token_hex(12)}"
         snapshot = str(candidate["sha256"])
-        run = {"schema_version": "5.0", "run_id": run_id, "project_key": key, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "authorization_mode": "review-only", "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "repair_cycle_count": 0, "max_repair_cycles": 3, "open_high_risk_assumptions": 0, "retention_policy_version": "5.0"}
+        run = {"schema_version": LEDGER_SCHEMA_VERSION, "run_id": run_id, "project_key": key, "target_snapshot_hash": snapshot, "current_snapshot_hash": snapshot, "state": "DRAFT", "outcome": "IN_PROGRESS", "revision": 0, "retention_policy_version": LEDGER_SCHEMA_VERSION}
         anchor = {"batch_id": batch_id, "relative_path": candidate["relative_path"], "project_identity": identity, "identity_mode": identity_mode, "review_intent": "system-default-nl-artifact-review"}
         children.append((run, anchor, str(candidate["relative_path"])))
     store.initialize()

@@ -29,9 +29,17 @@ $nlp-refinement-cli:nlp-review-propose start
 $nlp-refinement-cli:nlp-review-propose resume
 ```
 
-`start` lists the selectable NL artifacts before it creates a Batch. `resume`
-recovers verified facts from the ledger; it never relies on an old child
-transcript or scratch file.
+`start` automatically creates a Batch for every `AUTO` artifact admitted by
+the versioned deterministic NL policy. It does not show a numbered candidate
+table or ask the user to choose files. Recognized policy artifacts that exceed
+the 1 MB default limit or are not strict UTF-8 are reported as `RESTRICTED`:
+they are recorded for maintainer review but are not decoded, truncated,
+transcoded, or reviewed. `resume` recovers verified facts from the ledger; it
+never relies on an old child transcript or scratch file.
+
+Use `$nlp-refinement-cli:nlp-review-propose maintenance` to inspect an OPEN
+capability-review event and record a maintainer decision. This is not a path
+for force-including a restricted file.
 
 ## Local CLI setup
 

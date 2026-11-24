@@ -12,6 +12,12 @@ technical identifier is `nlp-refinement-cli`.
 - `nlp_refinement/tui_workflow.py` builds the reviewer, proposer, and assessor
   contracts. It does not create child threads or write a target worktree.
 - `nlp_refinement/state_store.py` owns the local SQLite run ledger only.
+- `nlp_refinement/artifact_inventory.py` implements
+  `nl-artifact-policy/v1`: it automatically admits only safe, strict-UTF-8,
+  at-most-1-MB assets matched by an explicit provider rule or validated project
+  declaration. Recognized files outside the size or encoding limits are
+  `RESTRICTED`, never auto-converted or auto-reviewed, and create local
+  maintainer capability facts.
 - `nlp_refinement/review_adapter.py` records validated review findings.
 - `nlp_refinement/patch_proposal_adapter.py` records validated human-only v6
   proposals. It never applies or tests a diff.
@@ -51,6 +57,8 @@ nlp-refinement --help
   OS-level sandbox guarantee.
 - Resume restores ledger facts and verifies the current snapshot; it does not
   revive an old child context.
+- A policy scan's AUTO inventory hash binds only AUTO artifacts. Changes to
+  excluded or restricted items do not stale an AUTO Batch.
 - This development source tree is current-only: it does not retain readers for
   retired protocol inputs. Preserve consistency for the retained protocol;
   changing a persisted current record requires a new schema version and an

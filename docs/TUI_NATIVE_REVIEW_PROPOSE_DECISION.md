@@ -2,11 +2,18 @@
 
 ## Status
 
-Implemented and released in `v0.12.2`. The manual TUI acceptance and
+The original selection design was implemented and released in `v0.12.2`. The manual TUI acceptance and
 release-candidate receipts are recorded in
 `docs/TUI_NATIVE_REVIEW_PROPOSE_ACCEPTANCE.md`. The documented limits on
 host-enforced role binding, child cwd observability, and per-child sandbox
 isolation remain unchanged.
+
+**Current-policy supersession:** `nl-artifact-policy/v1` now replaces the
+selection UX in this document. `start` automatically creates a Batch for all
+AUTO artifacts; it reports but never offers to include RESTRICTED artifacts.
+The historical selection statements and receipts below are retained only as
+evidence for the prior interface, not as a description of the current start
+behavior.
 
 ## Goal
 
@@ -17,7 +24,8 @@ $nlp-review-propose start
 $nlp-review-propose resume
 ```
 
-The TUI root selects NL artifacts, creates a Batch and one run per selected
+The TUI root classifies NL artifacts under the versioned policy, creates a
+Batch and one run per AUTO
 artifact, then serially delegates to three distinct native child contexts:
 
 ```text
@@ -25,9 +33,9 @@ root → reviewer child → verified ledger facts → proposer child → draft g
      → assessor child → v6 composition gate → human review
 ```
 
-`start` presents the full inventory before creating a Batch. The user chooses
-one or more items, `all`, or `cancel`. After selection, the normal path runs
-without another user command unless a defined stop condition occurs.
+`start` reports any RESTRICTED artifacts as factual notices, then creates a
+Batch for every AUTO artifact. The normal path runs without another user
+command unless a defined stop condition occurs.
 
 ## Non-goals
 
@@ -42,19 +50,19 @@ without another user command unless a defined stop condition occurs.
 
 | Actor | Authority | Output |
 | --- | --- | --- |
-| TUI root | Selection, serial delegation, schema gates, user-facing summary | Native-child final output routed to the Plugin adapters |
+| TUI root | Policy-driven AUTO batching, serial delegation, schema gates, user-facing summary | Native-child final output routed to the Plugin adapters |
 | `reviewer` generic TUI child | Read the snapshot-bound artifact and generated reviewer contract | Exactly one `review-result/v5` JSON object |
 | Plugin adapters and StateStore | Inventory, Batch/run persistence, snapshot checks, schema checks, findings and artifacts | Immutable ledger facts and bounded status |
 | `proposer` generic TUI child | Read the same snapshot-bound artifact, validated handoff facts, and generated proposer contract | Exactly one unpersisted `proposal-draft/v1` JSON object |
 | `proposal-assessor` generic TUI child | Read one root-validated draft, accepted evidence, and generated assessor contract | Exactly one unpersisted `proposal-assessment/v1` JSON object with an ID distinct from the proposer |
-| Human | Chooses scope, resolves prompts, reads and manually applies any proposal | Selection or explicit decision |
+| Human | Resolves prompts, maintains policy capability decisions, reads and manually applies any proposal | Explicit decision |
 
 The root never passes the reviewer's private conversation to the proposer.
 It only supplies a `ProposalHandoff` assembled from accepted StateStore data.
 
 ## Required invariants
 
-1. Every selected artifact has one `run_id`, stored relative path, and
+1. Every AUTO artifact has one `run_id`, stored relative path, and
    SHA-256 snapshot.
 2. A proposer is created only after review JSON is schema-valid, the snapshot
    still matches, and the review artifact plus findings are atomically stored.
@@ -101,12 +109,12 @@ shape and no v5 proposal reader is retained.
 
 | Surface | Required feature work |
 | --- | --- |
-| `nlp_refinement/tui_workflow.py` | Pure selection parsing, run disposition, ledger-derived target locator and resumable-Batch queries, handoff builder, and child-contract generator |
+| `nlp_refinement/tui_workflow.py` | Run disposition, ledger-derived target locator and resumable-Batch queries, handoff builder, and child-contract generator |
 | `nlp_refinement/development_runtime.py` | Development-only absolute CLI identity and capability binding; no PATH search or installation |
 | `nlp_refinement/state_store.py` | Read-only project-scoped and active-Batch recovery queries needed by the workflow module |
 | `nlp_refinement/refine.py` | Narrow internal CLI/query adapters only if the Skill cannot call the module safely otherwise |
 | `nlp_refinement/tui_workflow.py` child-contract generator | Sole role-specific contract source for the three generic child contexts |
-| `.agents/skills/nlp-review-propose/` | Explicit-only TUI procedure, selection UX, gates, resume behavior, and summary format |
+| `.agents/skills/nlp-review-propose/` | Explicit-only TUI procedure, policy notices, gates, resume behavior, maintenance UX, and summary format |
 | `tests/` and fixtures | Deterministic protocol and recovery coverage; separate manual TUI evidence |
 
 ## Known runtime limitation

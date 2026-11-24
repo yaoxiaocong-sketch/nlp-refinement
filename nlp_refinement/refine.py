@@ -122,18 +122,27 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--snapshot-hash", required=True)
     start.add_argument("--project-id", help="stable user-managed identity for a moved project")
 
-    scan = subcommands.add_parser("scan", help="list candidate NL artifacts without creating a run")
+    scan = subcommands.add_parser("scan", help="classify NL artifacts under the versioned policy without creating state")
     scan.add_argument("root", type=Path)
-    batch = subcommands.add_parser("batch-create", help="create review-ready child runs from an inventory")
+    observe = subcommands.add_parser(
+        "policy-observe",
+        help="record restricted NL artifacts and capability-review facts without model calls",
+    )
+    observe.add_argument("root", type=Path)
+    observe.add_argument("--expected-inventory-hash", required=True)
+    capability = subcommands.add_parser("capability-review", help="inspect and acknowledge local NL policy capability events")
+    capability_commands = capability.add_subparsers(dest="capability_command", required=True)
+    capability_commands.add_parser("status", help="list local OPEN and ACKNOWLEDGED capability events")
+    capability_acknowledge = capability_commands.add_parser("acknowledge", help="record one maintainer decision for an OPEN event")
+    capability_acknowledge.add_argument("--event-id", required=True)
+    capability_acknowledge.add_argument("--decision", required=True, choices=("implement", "defer", "not_product_scope"))
+    batch = subcommands.add_parser("batch-create", help="create review-ready child runs for every AUTO policy artifact")
     batch.add_argument("root", type=Path)
     batch.add_argument(
         "--expected-inventory-hash",
         required=True,
-        help="inventory_hash returned by the scan that the user selected from",
+        help="inventory_hash returned by the policy scan",
     )
-    selection = batch.add_mutually_exclusive_group(required=True)
-    selection.add_argument("--all", action="store_true")
-    selection.add_argument("--select", action="append", metavar="RELATIVE_PATH")
     batch_status = subcommands.add_parser("batch-status", help="read one batch and its child-run states")
     batch_status.add_argument("--batch-id", required=True)
     batch_events = subcommands.add_parser("batch-events", help="read one batch's content-free audit events")
@@ -352,6 +361,65 @@ def scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def policy_observe(args: argparse.Namespace, store: StateStore) -> int:
+    expected_inventory_hash = snapshot_hash(args.expected_inventory_hash)
+    inventory = scan_artifact_inventory(args.root)
+    if expected_inventory_hash != inventory["inventory_hash"]:
+        output({
+            "command": "policy-observe", "disposition": "INVENTORY_STALE",
+            "expected_inventory_hash": expected_inventory_hash,
+            "observed_inventory_hash": inventory["inventory_hash"],
+            "no_model_call_attestation": True, "no_target_write_attestation": True,
+        })
+        return 0
+    identity, _identity_mode = project_identity(args.root, None)
+    key = project_key(identity)
+    store.initialize()
+    observed = []
+    for item in inventory["restricted"]:
+        rule = dict(item["primary_rule"])
+        observed.append(store.observe_capability_occurrence(
+            {
+                "policy_id": inventory["policy_id"],
+                "provider_id": rule["provider_id"],
+                "provider_version": rule["provider_version"],
+                "rule_id": rule["rule_id"],
+                "artifact_kind": item["artifact_kind"],
+                "restriction_type": item["restriction_type"],
+            },
+            project_key=key,
+            relative_path=str(item["relative_path"]),
+            byte_count=int(item["byte_count"]),
+            utf8_status=str(item["utf8_status"]),
+            now=now_epoch(),
+        ))
+    output({
+        "command": "policy-observe", "disposition": "OBSERVED", "restricted": inventory["restricted"],
+        "events": [entry["event"] for entry in observed],
+        "no_model_call_attestation": True, "no_target_write_attestation": True,
+    })
+    return 0
+
+
+def capability_review(args: argparse.Namespace, store: StateStore) -> int:
+    if args.capability_command == "status":
+        events = store.list_capability_events()
+        output({
+            "command": "capability-review", "subcommand": "status", "events": events,
+            "open_count": sum(event["state"] == "OPEN" for event in events),
+            "no_model_call_attestation": True, "no_target_write_attestation": True,
+        })
+        return 0
+    acknowledged = store.acknowledge_capability_event(
+        args.event_id, decision=args.decision, recorded_via="cli-capability-review", now=now_epoch(),
+    )
+    output({
+        "command": "capability-review", "subcommand": "acknowledge", "event": acknowledged,
+        "no_model_call_attestation": True, "no_target_write_attestation": True,
+    })
+    return 0
+
+
 def batch_create(args: argparse.Namespace, store: StateStore) -> int:
     expected_inventory_hash = snapshot_hash(args.expected_inventory_hash)
     inventory = scan_artifact_inventory(args.root)
@@ -368,11 +436,9 @@ def batch_create(args: argparse.Namespace, store: StateStore) -> int:
             }
         )
         return 0
-    candidates = inventory["candidates"]
-    requested = {candidate["relative_path"] for candidate in candidates} if args.all else set(args.select or [])
-    selected = [candidate for candidate in candidates if candidate["relative_path"] in requested]
-    if not selected or requested != {candidate["relative_path"] for candidate in selected}:
-        raise ValueError("batch selection must name one or more current candidate relative paths")
+    selected = list(inventory["auto"])
+    if not selected:
+        raise ValueError("batch requires one or more current AUTO policy artifacts")
     identity, identity_mode = project_identity(args.root, None)
     key = project_key(identity)
     batch_id = f"batch_{secrets.token_hex(12)}"
@@ -850,8 +916,20 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {error}", file=sys.stderr)
             return 2
     store = StateStore(args.state_root / "state.db")
-    if args.command == "batch-create":
+    if args.command in {"batch-create", "policy-observe", "capability-review"}:
         try:
+            if args.command == "policy-observe":
+                return policy_observe(args, store)
+            if args.command == "capability-review":
+                if args.capability_command == "status" and not store.database_path.exists():
+                    output({
+                        "command": "capability-review", "subcommand": "status", "events": [],
+                        "open_count": 0, "no_model_call_attestation": True,
+                        "no_target_write_attestation": True,
+                    })
+                    return 0
+                store.initialize()
+                return capability_review(args, store)
             return batch_create(args, store)
         except (KeyError, OSError, StateStoreError, ValueError) as error:
             print(f"error: {error}", file=sys.stderr)

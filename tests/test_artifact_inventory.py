@@ -38,11 +38,15 @@ class ArtifactInventoryTests(unittest.TestCase):
         self.root = Path(self.temporary_directory.name) / "project"
         self.root.mkdir()
         (self.root / "AGENTS.md").write_text("# Project rules\n", encoding="utf-8")
-        (self.root / "plugin.json").write_text('{"name":"fixture"}\n', encoding="utf-8")
-        (self.root / "bad.json").write_text("{not json}\n", encoding="utf-8")
-        (self.root / "config.toml").write_text('name = "fixture"\n', encoding="utf-8")
-        (self.root / "workflow.yaml").write_text("steps:\n  - review\n", encoding="utf-8")
-        (self.root / "binary.md").write_bytes(b"\xff\x00")
+        (self.root / ".codex-plugin").mkdir()
+        (self.root / ".codex-plugin/plugin.json").write_text("{not json}\n", encoding="utf-8")
+        (self.root / ".codex").mkdir()
+        (self.root / ".codex/config.toml").write_text('name = "fixture"\n', encoding="utf-8")
+        skill = self.root / ".agents/skills/reviewer"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+        (self.root / ".codex/agents").mkdir()
+        (self.root / ".codex/agents/legacy.toml").write_bytes(b"\xff\x00")
         (self.root / "notes.txt").write_text("not a supported NL artifact\n", encoding="utf-8")
         (self.root / ".git").mkdir()
         (self.root / ".git" / "config.json").write_text("{}\n", encoding="utf-8")
@@ -61,32 +65,33 @@ class ArtifactInventoryTests(unittest.TestCase):
 
         self.assertEqual(first, second)
         self.assertEqual(tree_digest(self.root), before)
-        self.assertEqual(first["schema_version"], "2.0")
+        self.assertEqual(first["schema_version"], "3.0")
         self.assertEqual(first["scan_status"], "complete")
         schema = json.loads(
-            (ROOT / "nlp_refinement/resources/schemas/inventory/v2/artifact-inventory.schema.json").read_text(encoding="utf-8")
+            (ROOT / "nlp_refinement/resources/schemas/inventory/v3/artifact-inventory.schema.json").read_text(encoding="utf-8")
         )
         self.assertEqual(VALIDATOR.validate_instance(first, schema), [])
         self.assertEqual(
-            [candidate["relative_path"] for candidate in first["candidates"]],
-            ["AGENTS.md", "bad.json", "config.toml", "plugin.json", "workflow.yaml"],
+            [candidate["relative_path"] for candidate in first["auto"]],
+            [".agents/skills/reviewer/SKILL.md", ".codex-plugin/plugin.json", ".codex/config.toml", "AGENTS.md"],
         )
-        candidates = {candidate["relative_path"]: candidate for candidate in first["candidates"]}
+        candidates = {candidate["relative_path"]: candidate for candidate in first["auto"]}
         self.assertEqual(candidates["AGENTS.md"]["artifact_type"], "markdown")
-        self.assertEqual(candidates["plugin.json"]["format_status"], "valid")
-        self.assertEqual(candidates["bad.json"]["format_status"], "invalid")
-        self.assertEqual(candidates["config.toml"]["format_status"], "valid")
-        self.assertEqual(candidates["workflow.yaml"]["format_status"], "unvalidated")
-        self.assertTrue(all(candidate["utf8_status"] == "valid" for candidate in first["candidates"]))
-        self.assertTrue(all(len(candidate["sha256"]) == 64 for candidate in first["candidates"]))
+        self.assertEqual(candidates[".codex-plugin/plugin.json"]["format_status"], "invalid")
+        self.assertEqual(candidates[".codex/config.toml"]["format_status"], "valid")
+        self.assertTrue(all(candidate["utf8_status"] == "valid" for candidate in first["auto"]))
+        self.assertTrue(all(len(candidate["sha256"]) == 64 for candidate in first["auto"]))
+        self.assertEqual(
+            [(entry["relative_path"], entry["restriction_type"]) for entry in first["restricted"]],
+            [(".codex/agents/legacy.toml", "not_utf8")],
+        )
         self.assertEqual(
             first["excluded"],
             [
                 {"relative_path": ".git/", "reason": "excluded-directory"},
-                {"relative_path": "binary.md", "reason": "not-utf8"},
                 {"relative_path": "linked.md", "reason": "symbolic-link"},
                 {"relative_path": "node_modules/", "reason": "excluded-directory"},
-                {"relative_path": "notes.txt", "reason": "unsupported-extension"},
+                {"relative_path": "notes.txt", "reason": "no-policy-rule"},
             ],
         )
         self.assertNotIn("content", json.dumps(first))

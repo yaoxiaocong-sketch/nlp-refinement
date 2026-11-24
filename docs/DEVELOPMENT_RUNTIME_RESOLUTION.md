@@ -43,6 +43,8 @@ artifacts without an explicit developer decision.
     "commands": [
       "runtime-identity",
       "scan",
+      "policy-observe",
+      "capability-review",
       "batch-create",
       "resume",
       "tui-resume-locators",

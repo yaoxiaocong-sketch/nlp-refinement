@@ -19,6 +19,8 @@ TUI_NATIVE_INTERFACE = "nlp-refinement-tui-native/v1"
 TUI_NATIVE_REQUIRED_COMMANDS = (
     "runtime-identity",
     "scan",
+    "policy-observe",
+    "capability-review",
     "batch-create",
     "tui-resume-locators",
     "resume",

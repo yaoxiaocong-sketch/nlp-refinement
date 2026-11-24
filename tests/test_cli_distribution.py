@@ -37,10 +37,10 @@ class CliDistributionTests(unittest.TestCase):
 
         resource_root = ROOT / "nlp_refinement" / "resources"
         self.assertTrue((resource_root / "schemas" / "v5" / "review-result.schema.json").is_file())
-        self.assertTrue((resource_root / "schemas" / "inventory" / "v2" / "artifact-inventory.schema.json").is_file())
+        self.assertTrue((resource_root / "schemas" / "inventory" / "v3" / "artifact-inventory.schema.json").is_file())
         self.assertEqual(
             package["tool"]["setuptools"]["package-data"]["nlp_refinement.resources"],
-            ["schemas/v5/review-result.schema.json", "schemas/inventory/v2/*.json", "schemas/ledger/v1/*.json"],
+            ["schemas/v5/review-result.schema.json", "schemas/inventory/v3/*.json", "schemas/ledger/v1/*.json"],
         )
 
     def test_normal_command_does_not_expose_retired_host_execution(self) -> None:

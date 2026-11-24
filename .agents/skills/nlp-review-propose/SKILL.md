@@ -1,6 +1,6 @@
 ---
 name: nlp-review-propose
-description: "Use only when the user explicitly invokes $nlp-review-propose start or $nlp-review-propose resume to select NL artifacts, run native reviewer, proposer, and assessor children in sequence, or recover a persisted human-only proposal workflow."
+description: "Use only when the user explicitly invokes $nlp-review-propose start, $nlp-review-propose resume, or $nlp-review-propose maintenance to run or recover the human-only workflow, or acknowledge a local capability-review event."
 ---
 
 # NLP review propose
@@ -12,13 +12,14 @@ Batch/run facts, snapshot checks, schema validation, and SQLite ledger writes.
 It never starts an app-server, host controller, daemon, MCP bridge, or target
 write.
 
-Use `start` to create a new Batch from an explicit user selection. The normal
-user entries are exactly `$nlp-review-propose start` and
-`$nlp-review-propose resume`. A developer may explicitly add
-`--development-runtime-descriptor /absolute/path` to either entry for an
+Use `start` to create a new Batch from the deterministic NL artifact policy.
+Use `maintenance` to inspect and acknowledge local capability-review events.
+The normal user entries are exactly `$nlp-review-propose start`,
+`$nlp-review-propose resume`, and `$nlp-review-propose maintenance`. A developer may explicitly add
+`--development-runtime-descriptor /absolute/path` to `start` or `resume` for an
 isolated feature-wheel acceptance run. Use `resume` to continue one
 unambiguous persisted Batch.
-For every other request, explain that this Skill has only those two entries.
+For every other request, explain that this Skill has only these three entries.
 
 ## 2. Shared rules
 
@@ -31,7 +32,7 @@ For every other request, explain that this Skill has only those two entries.
      `disposition: RESOLVED`, then use only `resolved_cli.executable` and pass
      `--state-root <resolved_cli.state_root>` to every later workflow CLI call.
    - Otherwise run `nlp-refinement runtime-identity`. Require interface
-     `nlp-refinement-tui-native/v1` and all of `scan`, `batch-create`,
+     `nlp-refinement-tui-native/v1` and all of `scan`, `policy-observe`, `capability-review`, `batch-create`,
      `tui-resume-locators`, `tui-resume-candidates`, `tui-workflow-disposition`,
      `tui-proposal-handoff`, `tui-proposal-draft-handoff`, and
      `tui-compose-assessed-proposal`, `tui-child-contract`,
@@ -45,9 +46,10 @@ For every other request, explain that this Skill has only those two entries.
    is never target-location authority.
    The workflow command grammar is fixed: use
    `<cli> --state-root <state-root> scan <project-root>`,
-   `<cli> --state-root <state-root> batch-create <project-root> --expected-inventory-hash <hash> --all`,
-   `<cli> --state-root <state-root> batch-create <project-root> --expected-inventory-hash <hash> --select <relative-path>`
-   (one `--select` for each selected item),
+   `<cli> --state-root <state-root> policy-observe <project-root> --expected-inventory-hash <hash>`,
+   `<cli> --state-root <state-root> batch-create <project-root> --expected-inventory-hash <hash>`,
+   `<cli> --state-root <state-root> capability-review status`, and
+   `<cli> --state-root <state-root> capability-review acknowledge --event-id <event-id> --decision <decision>`,
    `<cli> --state-root <state-root> tui-resume-locators`, and
    `<cli> --state-root <state-root> tui-resume-candidates <project-root>`.
    `project-root` is always positional for these TUI workflow commands. Do not
@@ -81,40 +83,35 @@ For every other request, explain that this Skill has only those two entries.
    human-reviewable specification; a generic TUI child context does not prove that a `.toml` role file was loaded.
    The only permitted contract-retrieval commands are `tui-child-contract --role reviewer`,
    `tui-child-contract --role proposer`, and `tui-child-contract --role proposal-assessor`.
-6. Present the full inventory before Batch creation. Number candidates strictly
-   from `1` through `N` in their displayed order; `0` is never a valid index.
-   Accept only `all`, those 1-based indexes, ascending 1-based index ranges,
-   or `cancel`.
-7. Process selected runs in ascending relative-path order.
-8. Create a proposer child only after the review output passes schema and
+6. Process AUTO-policy runs in ascending relative-path order.
+7. Create a proposer child only after the review output passes schema and
    snapshot checks and the review artifact plus findings are accepted in the ledger.
-9. Supply a proposer only with a ledger-built ProposalHandoff, its generated proposer contract, and the matching
+8. Supply a proposer only with a ledger-built ProposalHandoff, its generated proposer contract, and the matching
    snapshot-bound artifact model view. It returns an unpersisted
    `proposal-draft/v1`, not a final v6 proposal.
-10. Validate that draft without writing it to the ledger, then create a distinct
+9. Validate that draft without writing it to the ledger, then create a distinct
    `nlp-proposal-assessor` child with only a root-built ProposalAssessmentHandoff.
    Never let the proposer assess its own draft.
-11. Validate the assessment, compose an unpersisted final
+10. Validate the assessment, compose an unpersisted final
    `patch-proposal-result/v6`, and only then use the existing proposal adapter
    to record that final result. Draft and assessment JSON remain transient.
-12. Treat child context separation as a context boundary. Report the parent
+11. Treat child context separation as a context boundary. Report the parent
    sandbox and approval policy as inherited unless the host independently proves
    a stricter child boundary.
 
 ## 3. Start
 
-1. Run the read-only inventory scan for the current project root.
-2. If no candidates exist, show exactly `未发现可审查的 NL 工件。` and stop
-   without a Batch. Do not show excluded entries in the normal TUI flow.
-3. Display each candidate with a 1-based index (`1` through `N`), artifact
-   type, relative path, byte count, SHA-256 prefix, and format status. The
-   displayed index must be the exact index accepted by the selection parser.
-4. Ask once: `all`, `1,3`, `2-4`, or `cancel`. Do not display, suggest, or
-   accept zero-based indexes such as `0,2` or `0-1`.
-5. On `cancel`, stop without Batch/run creation. On invalid selection, show the
-   same inventory and ask again. On a valid selection, call Batch creation with
-   the inventory hash returned by the scan.
-6. If Batch creation returns `INVENTORY_STALE`, rescan and repeat selection.
+1. Run the read-only policy inventory scan for the current project root.
+2. Call `policy-observe` with the returned inventory hash before any Batch or child. If it returns
+   `INVENTORY_STALE`, rescan and call `policy-observe` again. Do not create a Batch from a stale inventory.
+3. If the scan returned RESTRICTED items, display each relative path and its factual restriction type. State that
+   it was not reviewed, was recorded, and was not decoded into a model view, truncated, transcoded, or modified. Do not provide a
+   selection, confirmation, cancellation, or force-include action for restricted items.
+4. Do not display EXCLUDED entries in the normal TUI flow. If AUTO is empty and RESTRICTED and BLOCKED_SOURCE are
+   empty, show exactly `未发现可审查的 NL 工件。` and stop without a Batch.
+5. If AUTO is empty after the required restricted-item notice, stop without a Batch. Otherwise call `batch-create`
+   with the inventory hash and no selection arguments; it creates child runs for every AUTO item.
+6. If Batch creation returns `INVENTORY_STALE`, return to step 1.
 7. For each created run, build the snapshot-bound reviewer handoff, then call
    `tui-create-transient-root <root> --run-id <run-id>` once and retain the returned private system-temporary
    directory for the whole run. It must be outside the project root. Never create child output, draft, or assessment
@@ -195,3 +192,14 @@ Return a compact Batch summary with one row per artifact:
 
 Use `0` for target writes. Label native-child execution as unverified until the
 manual TUI acceptance record exists.
+
+## 6. Maintenance
+
+1. Call `capability-review status`. Display only events whose state is `OPEN`; do not display excluded files.
+2. For each OPEN event, display a 1-based number, artifact kind, restriction type, first-open time, and occurrence count.
+3. Ask for one event number or allow an empty response to exit. After a number is selected, offer exactly:
+   `1. 纳入实现计划` (`implement`), `2. 暂缓` (`defer`), or `3. 不属于本产品范围` (`not_product_scope`).
+4. Translate the selected number and decision to `capability-review acknowledge`; the user never types an event ID,
+   cluster ID, project key, or decision-record ID.
+5. Re-run `capability-review status` and show the selected event as `ACKNOWLEDGED` with its generated decision ID.
+   `ACKNOWLEDGED` means a maintenance decision exists; it does not mean restricted files were reviewed or the capability exists.

@@ -16,7 +16,6 @@ from nlp_refinement.patch_proposal_adapter import (
 )
 from nlp_refinement.state_store import StateStore
 from nlp_refinement.tui_workflow import (
-    SelectionInputError,
     SnapshotStaleError,
     WorkflowStateError,
     build_child_bootstrap,
@@ -29,7 +28,6 @@ from nlp_refinement.tui_workflow import (
     create_tui_transient_root,
     find_resumable_locators,
     find_resumable_batches,
-    parse_selection,
     proposal_draft_hash,
     validate_proposal_assessment,
     validate_proposal_draft,
@@ -100,17 +98,6 @@ class TuiWorkflowTests(unittest.TestCase):
             "caller-attested-redacted",
             now=1_001,
         )
-
-    def test_parse_selection_accepts_all_indexes_ranges_and_cancel(self) -> None:
-        candidates = ["AGENTS.md", "plugin.json", "workflow.yaml"]
-        self.assertEqual(parse_selection("all", candidates), ("AGENTS.md", "plugin.json", "workflow.yaml"))
-        self.assertEqual(parse_selection("1, 3", candidates), ("AGENTS.md", "workflow.yaml"))
-        self.assertEqual(parse_selection("2-3", candidates), ("plugin.json", "workflow.yaml"))
-        self.assertIsNone(parse_selection("cancel", candidates))
-        with self.assertRaises(SelectionInputError):
-            parse_selection("0", candidates)
-        with self.assertRaises(SelectionInputError):
-            parse_selection("1,4", candidates)
 
     def test_child_contracts_are_closed_and_derived_from_the_phase_validators(self) -> None:
         proposer = build_child_contract("proposer")
@@ -382,11 +369,13 @@ class TuiWorkflowTests(unittest.TestCase):
         self.assertIn("required_target_invariant_by_finding", skill)
         self.assertIn("generic TUI child context", skill)
         self.assertIn("`.toml` role file was loaded", skill)
-        self.assertIn("from `1` through `N`", skill)
-        self.assertIn("`1,3`, `2-4`, or `cancel`", skill)
-        self.assertIn("zero-based indexes", skill)
+        self.assertIn("policy-observe", skill)
+        self.assertIn("capability-review status", skill)
+        self.assertIn("$nlp-review-propose maintenance", skill)
+        self.assertIn("no selection arguments", skill)
+        self.assertIn("not decoded into a model view, truncated, transcoded, or modified", skill)
         self.assertIn("未发现可审查的 NL 工件。", skill)
-        self.assertIn("Do not show excluded entries in the normal TUI flow", skill)
+        self.assertIn("Do not display EXCLUDED entries in the normal TUI flow", skill)
         self.assertNotIn("show the excluded summary", skill)
         self.assertIn("scan <project-root>", skill)
         self.assertIn("batch-create <project-root>", skill)

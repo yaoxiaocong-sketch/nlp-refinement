@@ -1,11 +1,17 @@
 # TUI-native review → proposal acceptance
 
+> Historical-interface notice: the manual M01/M02/M03 selection receipts below
+> document the pre-policy-selection interface. Current `start` behavior is
+> policy-driven AUTO batching with factual RESTRICTED notices. These runtime
+> receipts must be re-run before they are used as evidence for the new entry
+> behavior.
+
 ## Automated acceptance map
 
 | ID | Required behavior | Evidence |
 | --- | --- | --- |
-| A01 | Inventory items expose relative path, type, size, hash, and format status | Inventory tests |
-| A02 | Selection accepts explicit item sets, ranges, `all`, and `cancel` | Workflow unit tests |
+| A01 | AUTO inventory items expose relative path, type, size, hash, format status, and deterministic policy rule | Inventory tests |
+| A02 | Only AUTO items are batched; RESTRICTED items are recorded without model calls or a selection path | Policy, command, and StateStore tests |
 | A03 | An inventory mismatch before Batch creation stops with `INVENTORY_STALE` | Batch/workflow tests |
 | A04 | Review output must pass the review schema and current-snapshot check before it is recorded | Adapter and StateStore tests |
 | A05 | Proposal handoff contains only accepted review facts and open findings | Handoff tests |

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nlp_refinement.state_store import LeaseConflict, StateStore
+from nlp_refinement.state_store import LeaseConflict, StateStore, StateStoreError
 
 RUN_ID = "run_aaaaaaaaaaaa"
 SNAPSHOT = "b" * 64
@@ -39,6 +39,17 @@ class StateStoreTests(unittest.TestCase):
         duplicate = run_payload() | {"run_id": "run_bbbbbbbbbbbb", "repair_cycle_count": 0}
         with self.assertRaises(ValueError):
             self.store.create_run(duplicate, {"goal": "test"}, now=1_001)
+
+    def test_existing_current_only_ledger_requires_explicit_reset_when_policy_tables_are_absent(self) -> None:
+        with self.store._connection() as connection:
+            connection.execute("DROP INDEX capability_one_open_event_per_cluster")
+            connection.execute("DROP TABLE capability_decisions")
+            connection.execute("DROP TABLE capability_events")
+            connection.execute("DROP TABLE capability_occurrences")
+            connection.execute("DROP TABLE capability_clusters")
+
+        with self.assertRaisesRegex(StateStoreError, "STATE_RESET_REQUIRED"):
+            StateStore(self.store.database_path).initialize()
 
     def test_lease_excludes_a_competing_owner(self) -> None:
         first = self.store.acquire_lease(RUN_ID, "owner-one", now=1_000, ttl_seconds=60)

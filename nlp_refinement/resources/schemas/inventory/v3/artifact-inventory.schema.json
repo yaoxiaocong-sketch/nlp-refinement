@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NLP-refinement Deterministic NL Artifact Policy v1 Inventory",
+  "type": "object",
+  "required": ["schema_version", "policy_id", "policy_sha256", "declaration_sha256", "scan_status", "inventory_id", "inventory_hash", "auto", "restricted", "blocked", "excluded"],
+  "properties": {
+    "schema_version": {"const": "3.0"},
+    "policy_id": {"const": "nl-artifact-policy/v1"},
+    "policy_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "declaration_sha256": {"type": "string", "pattern": "^$|^[a-f0-9]{64}$"},
+    "scan_status": {"const": "complete"},
+    "inventory_id": {"type": "string", "pattern": "^inv_[a-f0-9]{24}$"},
+    "inventory_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "auto": {"type": "array", "items": {"type": "object", "required": ["relative_path", "artifact_kind", "primary_rule", "byte_count", "artifact_type", "sha256", "utf8_status", "format_status"], "properties": {"relative_path": {"type": "string", "minLength": 1}, "artifact_kind": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}, "primary_rule": {"type": "object", "required": ["provider_id", "provider_version", "rule_id", "artifact_kind"], "properties": {"provider_id": {"type": "string", "minLength": 1}, "provider_version": {"type": "string", "minLength": 1}, "rule_id": {"type": "string", "minLength": 1}, "artifact_kind": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}}, "additionalProperties": false}, "byte_count": {"type": "integer", "minimum": 0, "maximum": 1000000}, "artifact_type": {"enum": ["markdown", "json", "toml", "yaml"]}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "utf8_status": {"const": "valid"}, "format_status": {"enum": ["valid", "invalid", "unvalidated", "not-applicable"]}}, "additionalProperties": false}},
+    "restricted": {"type": "array", "items": {"type": "object", "required": ["relative_path", "artifact_kind", "primary_rule", "byte_count", "restriction_type", "utf8_status", "format_status"], "properties": {"relative_path": {"type": "string", "minLength": 1}, "artifact_kind": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}, "primary_rule": {"type": "object", "required": ["provider_id", "provider_version", "rule_id", "artifact_kind"], "properties": {"provider_id": {"type": "string", "minLength": 1}, "provider_version": {"type": "string", "minLength": 1}, "rule_id": {"type": "string", "minLength": 1}, "artifact_kind": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"}}, "additionalProperties": false}, "byte_count": {"type": "integer", "minimum": 0}, "restriction_type": {"enum": ["exceeds_default_size_limit", "not_utf8"]}, "utf8_status": {"enum": ["not-read", "invalid"]}, "format_status": {"const": "not-applicable"}}, "additionalProperties": false}},
+    "blocked": {"type": "array", "items": {"type": "object", "required": ["relative_path", "reason"], "properties": {"relative_path": {"type": "string", "minLength": 1}, "reason": {"enum": ["unreadable-directory", "unreadable-entry", "unreadable-file", "symbolic-link", "not-regular-file", "entry-changed"]}}, "additionalProperties": false}},
+    "excluded": {"type": "array", "items": {"type": "object", "required": ["relative_path", "reason"], "properties": {"relative_path": {"type": "string", "minLength": 1}, "reason": {"enum": ["symbolic-link", "not-regular-file", "excluded-directory", "policy-control-file", "excluded-filename", "no-policy-rule", "suppressed-directory", "unsupported-extension"]}}, "additionalProperties": false}}
+  },
+  "additionalProperties": false
+}

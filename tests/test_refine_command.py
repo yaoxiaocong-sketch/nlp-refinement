@@ -68,7 +68,7 @@ class RefineCommandTests(unittest.TestCase):
         return scratch
 
     def test_scan_is_read_only_and_does_not_create_a_state_ledger(self) -> None:
-        artifact = self.target / "SKILL.md"
+        artifact = self.target / "AGENTS.md"
         artifact.write_text("# fixture\n", encoding="utf-8")
 
         completed = self.invoke("scan", str(self.target))
@@ -77,8 +77,43 @@ class RefineCommandTests(unittest.TestCase):
         rendered = json.loads(completed.stdout)
         self.assertEqual(rendered["command"], "scan")
         self.assertEqual(rendered["inventory"]["scan_status"], "complete")
-        self.assertEqual(rendered["inventory"]["candidates"][0]["relative_path"], "SKILL.md")
+        self.assertEqual(rendered["inventory"]["auto"][0]["relative_path"], "AGENTS.md")
         self.assertFalse((self.state_root / "state.db").exists())
+
+    def test_capability_review_status_on_an_uninitialized_state_root_is_read_only(self) -> None:
+        status = self.invoke("capability-review", "status")
+
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertEqual(json.loads(status.stdout)["events"], [])
+        self.assertFalse((self.state_root / "state.db").exists())
+
+    def test_policy_observe_records_restricted_artifacts_before_auto_batch_creation(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+        agent_directory = self.target / ".codex/agents"
+        agent_directory.mkdir(parents=True)
+        (agent_directory / "legacy.toml").write_bytes(b"\xff\x00")
+
+        observed = self.invoke(
+            "policy-observe", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+
+        self.assertEqual(observed.returncode, 0, observed.stderr)
+        rendered = json.loads(observed.stdout)
+        self.assertEqual(rendered["disposition"], "OBSERVED")
+        self.assertEqual(rendered["restricted"][0]["relative_path"], ".codex/agents/legacy.toml")
+        self.assertEqual(rendered["events"][0]["state"], "OPEN")
+        self.assertTrue((self.state_root / "state.db").exists())
+
+        status = self.invoke("capability-review", "status")
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertEqual(json.loads(status.stdout)["open_count"], 1)
+
+        event_id = rendered["events"][0]["event_id"]
+        acknowledged = self.invoke(
+            "capability-review", "acknowledge", "--event-id", event_id, "--decision", "defer",
+        )
+        self.assertEqual(acknowledged.returncode, 0, acknowledged.stderr)
+        self.assertEqual(json.loads(acknowledged.stdout)["event"]["state"], "ACKNOWLEDGED")
 
     def test_tui_child_contract_is_read_only_and_cannot_fall_back_to_an_unknown_role(self) -> None:
         proposer = self.invoke("tui-child-contract", "--role", "proposer")
@@ -100,12 +135,12 @@ class RefineCommandTests(unittest.TestCase):
 
     def test_batch_create_atomically_creates_ready_child_runs_without_model_calls(self) -> None:
         (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
-        (self.target / "plugin.json").write_text("{}\n", encoding="utf-8")
+        (self.target / ".codex").mkdir()
+        (self.target / ".codex/config.toml").write_text("name = 'fixture'\n", encoding="utf-8")
 
         created = self.invoke(
             "batch-create",
             str(self.target),
-            "--all",
             "--expected-inventory-hash",
             self.current_inventory_hash(),
         )
@@ -120,7 +155,7 @@ class RefineCommandTests(unittest.TestCase):
             batch["summary"],
             {"selected_count": 2, "active_child_count": 2, "purged_child_count": 0, "by_state": {"READY": 2}},
         )
-        self.assertEqual([item["relative_path"] for item in batch["items"]], ["AGENTS.md", "plugin.json"])
+        self.assertEqual([item["relative_path"] for item in batch["items"]], [".codex/config.toml", "AGENTS.md"])
         self.assertTrue(all(item["state"] == "READY" for item in batch["items"]))
         inspected = self.invoke("batch-status", "--batch-id", batch["batch_id"])
         self.assertEqual(inspected.returncode, 0, inspected.stderr)
@@ -129,7 +164,7 @@ class RefineCommandTests(unittest.TestCase):
     def test_tui_resume_candidates_is_project_scoped_and_read_only(self) -> None:
         (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
         created = self.invoke(
-            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
         )
         self.assertEqual(created.returncode, 0, created.stderr)
 
@@ -145,7 +180,7 @@ class RefineCommandTests(unittest.TestCase):
     def test_tui_resume_locators_reads_the_ledger_without_a_current_project_root(self) -> None:
         (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
         created = self.invoke(
-            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
         )
         self.assertEqual(created.returncode, 0, created.stderr)
 
@@ -164,7 +199,7 @@ class RefineCommandTests(unittest.TestCase):
         artifact = self.target / "AGENTS.md"
         artifact.write_text("# rules\n", encoding="utf-8")
         created = self.invoke(
-            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
         )
         self.assertEqual(created.returncode, 0, created.stderr)
         batch = json.loads(created.stdout)["batch"]
@@ -194,7 +229,7 @@ class RefineCommandTests(unittest.TestCase):
         artifact = self.target / "AGENTS.md"
         artifact.write_text("# rules\n", encoding="utf-8")
         created = self.invoke(
-            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
         )
         self.assertEqual(created.returncode, 0, created.stderr)
         run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
@@ -220,7 +255,7 @@ class RefineCommandTests(unittest.TestCase):
         artifact = self.target / "AGENTS.md"
         artifact.write_text("# rules\n", encoding="utf-8")
         created = self.invoke(
-            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
         )
         self.assertEqual(created.returncode, 0, created.stderr)
         run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
@@ -254,11 +289,38 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(listed.returncode, 0, listed.stderr)
         self.assertEqual(json.loads(listed.stdout)["receipts"], [receipt])
 
+    def test_tui_dispatch_receipts_allow_a_fresh_child_for_the_same_role_after_a_failed_attempt(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
+        scratch = self.create_tui_scratch(run_id)
+        first = {
+            "receipt_schema": "tui-child-dispatch-receipt/v1", "role": "proposer",
+            "child_thread_id": "/root/first_proposer", "contract_sha256": "a" * 64,
+            "prompt_sha256": "b" * 64, "prompt_utf8_bytes": 700,
+            "observed_cwd": "unverified", "host_role_binding": "unverified", "child_sandbox": "unverified",
+        }
+        second = first | {"child_thread_id": "/root/fresh_proposer", "prompt_sha256": "c" * 64}
+        for number, receipt in enumerate((first, second), start=1):
+            receipt_path = scratch / f"proposer-{number}.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            recorded = self.invoke(
+                "tui-record-child-dispatch-receipt", str(self.target), "--run-id", run_id,
+                "--receipt-file", str(receipt_path), "--transient-root", str(scratch),
+            )
+            self.assertEqual(recorded.returncode, 0, recorded.stderr)
+        listed = self.invoke("tui-child-dispatch-receipts", str(self.target), "--run-id", run_id)
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertEqual(json.loads(listed.stdout)["receipts"], [first, second])
+
     def test_tui_assessment_commands_compose_v6_without_writing_the_ledger(self) -> None:
         artifact = self.target / "AGENTS.md"
         artifact.write_text("# rules\n", encoding="utf-8")
         created = self.invoke(
-            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
         )
         self.assertEqual(created.returncode, 0, created.stderr)
         item = json.loads(created.stdout)["batch"]["items"][0]
@@ -342,7 +404,7 @@ class RefineCommandTests(unittest.TestCase):
         artifact = self.target / "AGENTS.md"
         artifact.write_text("# rules\n", encoding="utf-8")
         created = self.invoke(
-            "batch-create", str(self.target), "--all", "--expected-inventory-hash", self.current_inventory_hash(),
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
         )
         self.assertEqual(created.returncode, 0, created.stderr)
         item = json.loads(created.stdout)["batch"]["items"][0]
@@ -433,9 +495,20 @@ class RefineCommandTests(unittest.TestCase):
     def test_batch_create_requires_a_confirmed_inventory_hash_before_initializing_a_ledger(self) -> None:
         (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
 
-        created = self.invoke("batch-create", str(self.target), "--all")
+        created = self.invoke("batch-create", str(self.target))
 
         self.assertEqual(created.returncode, 2)
+        self.assertFalse((self.state_root / "state.db").exists())
+
+    def test_batch_create_rejects_the_retired_manual_all_switch_before_creating_state(self) -> None:
+        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+
+        created = self.invoke(
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(), "--all",
+        )
+
+        self.assertEqual(created.returncode, 2)
+        self.assertIn("unrecognized arguments: --all", created.stderr)
         self.assertFalse((self.state_root / "state.db").exists())
 
     def test_batch_create_rejects_an_invalid_inventory_hash_before_initializing_a_ledger(self) -> None:
@@ -444,7 +517,6 @@ class RefineCommandTests(unittest.TestCase):
         created = self.invoke(
             "batch-create",
             str(self.target),
-            "--all",
             "--expected-inventory-hash",
             "not-a-sha256",
         )
@@ -462,7 +534,6 @@ class RefineCommandTests(unittest.TestCase):
         created = self.invoke(
             "batch-create",
             str(self.target),
-            "--all",
             "--expected-inventory-hash",
             expected_inventory_hash,
         )
@@ -477,7 +548,7 @@ class RefineCommandTests(unittest.TestCase):
         self.assertTrue(result["no_target_write_attestation"])
         self.assertFalse((self.state_root / "state.db").exists())
 
-    def test_batch_create_accepts_a_confirmed_selection_when_only_an_excluded_file_changes(self) -> None:
+    def test_batch_create_accepts_the_same_auto_inventory_when_only_an_excluded_file_changes(self) -> None:
         (self.target / "AGENTS.md").write_text("# stable candidate\n", encoding="utf-8")
         (self.target / "notes.txt").write_text("initial excluded text\n", encoding="utf-8")
         expected_inventory_hash = self.current_inventory_hash()
@@ -486,7 +557,6 @@ class RefineCommandTests(unittest.TestCase):
         created = self.invoke(
             "batch-create",
             str(self.target),
-            "--all",
             "--expected-inventory-hash",
             expected_inventory_hash,
         )
@@ -497,14 +567,12 @@ class RefineCommandTests(unittest.TestCase):
         self.assertIn("batch", result)
         self.assertTrue((self.state_root / "state.db").exists())
 
-    def test_batch_rejects_a_selection_outside_the_current_inventory_without_runs(self) -> None:
-        (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
+    def test_batch_rejects_an_empty_auto_inventory_without_runs(self) -> None:
+        (self.target / "README.md").write_text("# documentation\n", encoding="utf-8")
 
         created = self.invoke(
             "batch-create",
             str(self.target),
-            "--select",
-            "missing.md",
             "--expected-inventory-hash",
             self.current_inventory_hash(),
         )
@@ -518,7 +586,6 @@ class RefineCommandTests(unittest.TestCase):
             self.invoke(
                 "batch-create",
                 str(self.target),
-                "--all",
                 "--expected-inventory-hash",
                 self.current_inventory_hash(),
             ).stdout
@@ -570,12 +637,12 @@ class RefineCommandTests(unittest.TestCase):
 
     def test_retention_marks_a_batch_member_purged_then_removes_an_empty_batch(self) -> None:
         (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
-        (self.target / "plugin.json").write_text("{}\n", encoding="utf-8")
+        (self.target / ".codex").mkdir()
+        (self.target / ".codex/config.toml").write_text("name = 'fixture'\n", encoding="utf-8")
         batch = json.loads(
             self.invoke(
                 "batch-create",
                 str(self.target),
-                "--all",
                 "--expected-inventory-hash",
                 self.current_inventory_hash(),
             ).stdout
@@ -624,12 +691,12 @@ class RefineCommandTests(unittest.TestCase):
 
     def test_cli_retention_preview_and_sweep_keep_batch_status_consistent(self) -> None:
         (self.target / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
-        (self.target / "plugin.json").write_text("{}\n", encoding="utf-8")
+        (self.target / ".codex").mkdir()
+        (self.target / ".codex/config.toml").write_text("name = 'fixture'\n", encoding="utf-8")
         batch = json.loads(
             self.invoke(
                 "batch-create",
                 str(self.target),
-                "--all",
                 "--expected-inventory-hash",
                 self.current_inventory_hash(),
             ).stdout
@@ -689,7 +756,6 @@ class RefineCommandTests(unittest.TestCase):
             self.invoke(
                 "batch-create",
                 str(self.target),
-                "--all",
                 "--expected-inventory-hash",
                 self.current_inventory_hash(),
             ).stdout

@@ -235,6 +235,17 @@ class StateStore:
                 raise StateStoreError(
                     "ledger lacks the Batch schema; export or remove it explicitly before using this development build"
                 )
+            capability_tables = {
+                "capability_clusters",
+                "capability_occurrences",
+                "capability_events",
+                "capability_decisions",
+            }
+            if "runs" in tables and not capability_tables.issubset(tables):
+                raise StateStoreError(
+                    "STATE_RESET_REQUIRED: ledger lacks the deterministic NL policy tables; "
+                    "remove the development state explicitly before using this build"
+                )
             connection.execute("PRAGMA journal_mode = WAL")
             connection.execute("PRAGMA foreign_keys = ON")
             connection.executescript(
@@ -319,6 +330,47 @@ class StateStore:
                     event_type TEXT NOT NULL,
                     payload_json TEXT NOT NULL,
                     created_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS capability_clusters (
+                    cluster_id TEXT PRIMARY KEY,
+                    policy_id TEXT NOT NULL,
+                    provider_id TEXT NOT NULL,
+                    provider_version TEXT NOT NULL,
+                    rule_id TEXT NOT NULL,
+                    artifact_kind TEXT NOT NULL,
+                    restriction_type TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    UNIQUE (policy_id, provider_id, provider_version, rule_id, artifact_kind, restriction_type)
+                );
+                CREATE TABLE IF NOT EXISTS capability_occurrences (
+                    occurrence_id TEXT PRIMARY KEY,
+                    cluster_id TEXT NOT NULL REFERENCES capability_clusters(cluster_id) ON DELETE CASCADE,
+                    project_key TEXT NOT NULL,
+                    relative_path TEXT NOT NULL,
+                    byte_count INTEGER NOT NULL,
+                    utf8_status TEXT NOT NULL,
+                    first_seen_at INTEGER NOT NULL,
+                    last_seen_at INTEGER NOT NULL,
+                    seen_count INTEGER NOT NULL,
+                    UNIQUE (cluster_id, project_key, relative_path)
+                );
+                CREATE TABLE IF NOT EXISTS capability_events (
+                    event_id TEXT PRIMARY KEY,
+                    cluster_id TEXT NOT NULL REFERENCES capability_clusters(cluster_id) ON DELETE CASCADE,
+                    state TEXT NOT NULL CHECK (state IN ('OPEN', 'ACKNOWLEDGED')),
+                    opened_at INTEGER NOT NULL,
+                    acknowledged_at INTEGER,
+                    reopened_from_event_id TEXT REFERENCES capability_events(event_id),
+                    decision_id TEXT
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS capability_one_open_event_per_cluster
+                    ON capability_events(cluster_id) WHERE state = 'OPEN';
+                CREATE TABLE IF NOT EXISTS capability_decisions (
+                    decision_id TEXT PRIMARY KEY,
+                    event_id TEXT NOT NULL UNIQUE REFERENCES capability_events(event_id) ON DELETE CASCADE,
+                    decision TEXT NOT NULL CHECK (decision IN ('implement', 'defer', 'not_product_scope')),
+                    recorded_via TEXT NOT NULL,
+                    recorded_at INTEGER NOT NULL
                 );
                 """
             )
@@ -507,6 +559,152 @@ class StateStore:
             }
             for row in rows
         ]
+
+    @staticmethod
+    def _capability_cluster_id(cluster: dict[str, str]) -> str:
+        required = {
+            "policy_id", "provider_id", "provider_version", "rule_id", "artifact_kind", "restriction_type",
+        }
+        if set(cluster) != required or any(not isinstance(cluster[field], str) or not cluster[field] for field in required):
+            raise ValueError("capability cluster is invalid")
+        encoded = StateStore._dump({field: cluster[field] for field in sorted(required)})
+        return "crc_" + hashlib.sha256(f"nlp-refinement/capability-cluster/v1\\0{encoded}".encode("utf-8")).hexdigest()[:24]
+
+    @staticmethod
+    def _capability_event_from_row(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "event_id": row["event_id"], "cluster_id": row["cluster_id"], "state": row["state"],
+            "opened_at": row["opened_at"], "acknowledged_at": row["acknowledged_at"],
+            "reopened_from_event_id": row["reopened_from_event_id"], "decision_id": row["decision_id"],
+        }
+
+    def observe_capability_occurrence(
+        self, cluster: dict[str, str], *, project_key: str, relative_path: str,
+        byte_count: int, utf8_status: str, now: int,
+    ) -> dict[str, Any]:
+        """Record one restricted fact and create at most one active maintenance event.
+
+        A duplicate is defined by cluster, project and relative path.  Content is
+        deliberately not read or hashed for restricted artifacts.
+        """
+        if (
+            re.fullmatch(r"[a-f0-9]{64}", project_key) is None
+            or not relative_path
+            or relative_path.startswith("/")
+            or ".." in relative_path.split("/")
+            or not isinstance(byte_count, int)
+            or byte_count < 0
+            or utf8_status not in {"not-read", "invalid"}
+        ):
+            raise ValueError("capability occurrence is invalid")
+        cluster_id = self._capability_cluster_id(cluster)
+        occurrence_id = "cro_" + hashlib.sha256(
+            f"nlp-refinement/capability-occurrence/v1\\0{cluster_id}\\0{project_key}\\0{relative_path}".encode("utf-8")
+        ).hexdigest()[:24]
+        with self._transaction() as connection:
+            connection.execute(
+                """INSERT INTO capability_clusters (
+                    cluster_id, policy_id, provider_id, provider_version, rule_id, artifact_kind, restriction_type, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(cluster_id) DO NOTHING""",
+                (cluster_id, cluster["policy_id"], cluster["provider_id"], cluster["provider_version"], cluster["rule_id"], cluster["artifact_kind"], cluster["restriction_type"], now),
+            )
+            existing = connection.execute(
+                "SELECT occurrence_id FROM capability_occurrences WHERE cluster_id = ? AND project_key = ? AND relative_path = ?",
+                (cluster_id, project_key, relative_path),
+            ).fetchone()
+            occurrence_created = existing is None
+            if occurrence_created:
+                connection.execute(
+                    """INSERT INTO capability_occurrences (
+                        occurrence_id, cluster_id, project_key, relative_path, byte_count, utf8_status,
+                        first_seen_at, last_seen_at, seen_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+                    (occurrence_id, cluster_id, project_key, relative_path, byte_count, utf8_status, now, now),
+                )
+            else:
+                occurrence_id = str(existing["occurrence_id"])
+                connection.execute(
+                    """UPDATE capability_occurrences
+                    SET byte_count = ?, utf8_status = ?, last_seen_at = ?, seen_count = seen_count + 1
+                    WHERE occurrence_id = ?""",
+                    (byte_count, utf8_status, now, occurrence_id),
+                )
+            open_row = connection.execute(
+                "SELECT * FROM capability_events WHERE cluster_id = ? AND state = 'OPEN'", (cluster_id,)
+            ).fetchone()
+            if open_row is not None:
+                event = self._capability_event_from_row(open_row)
+                event_created = False
+            elif not occurrence_created:
+                prior = connection.execute(
+                    "SELECT * FROM capability_events WHERE cluster_id = ? ORDER BY opened_at DESC, event_id DESC LIMIT 1", (cluster_id,)
+                ).fetchone()
+                if prior is None:
+                    raise StateStoreError("capability occurrence has no event")
+                event = self._capability_event_from_row(prior)
+                event_created = False
+            else:
+                prior = connection.execute(
+                    "SELECT * FROM capability_events WHERE cluster_id = ? ORDER BY opened_at DESC, event_id DESC LIMIT 1", (cluster_id,)
+                ).fetchone()
+                event_id = "cre_" + secrets.token_hex(12)
+                reopened_from = None if prior is None else str(prior["event_id"])
+                connection.execute(
+                    """INSERT INTO capability_events (
+                        event_id, cluster_id, state, opened_at, acknowledged_at, reopened_from_event_id, decision_id
+                    ) VALUES (?, ?, 'OPEN', ?, NULL, ?, NULL)""",
+                    (event_id, cluster_id, now, reopened_from),
+                )
+                event = {
+                    "event_id": event_id, "cluster_id": cluster_id, "state": "OPEN", "opened_at": now,
+                    "acknowledged_at": None, "reopened_from_event_id": reopened_from, "decision_id": None,
+                }
+                event_created = True
+        return {"cluster_id": cluster_id, "occurrence_id": occurrence_id, "occurrence_created": occurrence_created, "event": event, "event_created": event_created}
+
+    def acknowledge_capability_event(self, event_id: str, *, decision: str, recorded_via: str, now: int) -> dict[str, Any]:
+        if decision not in {"implement", "defer", "not_product_scope"} or not recorded_via:
+            raise ValueError("capability decision is invalid")
+        with self._transaction() as connection:
+            event = connection.execute("SELECT * FROM capability_events WHERE event_id = ?", (event_id,)).fetchone()
+            if event is None:
+                raise KeyError(f"capability event not found: {event_id}")
+            if event["state"] != "OPEN":
+                raise ValueError("capability event is not open")
+            decision_id = "cdr_" + secrets.token_hex(12)
+            connection.execute(
+                "INSERT INTO capability_decisions (decision_id, event_id, decision, recorded_via, recorded_at) VALUES (?, ?, ?, ?, ?)",
+                (decision_id, event_id, decision, recorded_via, now),
+            )
+            connection.execute(
+                "UPDATE capability_events SET state = 'ACKNOWLEDGED', acknowledged_at = ?, decision_id = ? WHERE event_id = ?",
+                (now, decision_id, event_id),
+            )
+            rendered = dict(self._capability_event_from_row(event))
+            rendered.update({"state": "ACKNOWLEDGED", "acknowledged_at": now, "decision_id": decision_id})
+        return rendered
+
+    def list_capability_events(self) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """SELECT e.*, c.policy_id, c.provider_id, c.provider_version, c.rule_id,
+                    c.artifact_kind, c.restriction_type,
+                    (SELECT COUNT(*) FROM capability_occurrences o WHERE o.cluster_id = e.cluster_id) AS occurrence_count
+                FROM capability_events e
+                JOIN capability_clusters c ON c.cluster_id = e.cluster_id
+                ORDER BY e.opened_at, e.event_id"""
+            ).fetchall()
+        rendered = []
+        for row in rows:
+            event = self._capability_event_from_row(row)
+            event["cluster"] = {
+                "policy_id": row["policy_id"], "provider_id": row["provider_id"],
+                "provider_version": row["provider_version"], "rule_id": row["rule_id"],
+                "artifact_kind": row["artifact_kind"], "restriction_type": row["restriction_type"],
+            }
+            event["occurrence_count"] = row["occurrence_count"]
+            rendered.append(event)
+        return rendered
 
     def acquire_lease(self, run_id: str, owner_session_id: str, now: int, ttl_seconds: int = 600) -> dict[str, Any]:
         if ttl_seconds <= 0:
@@ -909,8 +1107,8 @@ class StateStore:
                 "SELECT payload_json FROM events WHERE run_id = ? AND event_type = ?",
                 (run_id, "tui-child-dispatch-receipt"),
             ).fetchall()
-            if any(json.loads(row["payload_json"])["role"] == normalized["role"] for row in prior_rows):
-                raise ValueError("a child dispatch receipt for this role already exists")
+            if any(json.loads(row["payload_json"]) == normalized for row in prior_rows):
+                raise ValueError("an identical child dispatch receipt already exists")
             updated = self._write_run(connection, run, now)
             self._record_event(
                 connection, run_id, updated["revision"], "tui-child-dispatch-receipt", normalized, now,

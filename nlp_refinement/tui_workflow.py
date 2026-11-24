@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import shlex
 import shutil
 import stat
@@ -41,10 +40,6 @@ from nlp_refinement.state_store import (
 )
 
 
-class SelectionInputError(ValueError):
-    """Raised when an inventory selection is outside the displayed choices."""
-
-
 class WorkflowStateError(ValueError):
     """Raised when a requested workflow phase has no accepted prerequisite."""
 
@@ -53,8 +48,6 @@ class SnapshotStaleError(WorkflowStateError):
     """Raised when the current artifact bytes differ from the stored snapshot."""
 
 
-_INDEX = re.compile(r"[1-9][0-9]*")
-_RANGE = re.compile(r"([1-9][0-9]*)-([1-9][0-9]*)")
 _DRAFT_FIELDS = {
     "schema_version", "phase_name", "proposer_id", "summary", "base_snapshot_hash",
     "review_artifact_id", "no_target_write_attestation", "proposals",
@@ -448,33 +441,6 @@ def build_child_dispatch_receipt(
         "host_role_binding": "unverified",
         "child_sandbox": "unverified",
     }
-
-
-def parse_selection(value: str, candidates: list[str]) -> tuple[str, ...] | None:
-    """Parse the explicit TUI selection grammar without choosing on the user's behalf."""
-    normalized = value.strip().lower()
-    if normalized == "cancel":
-        return None
-    if normalized == "all":
-        return tuple(candidates)
-    if not normalized or not candidates:
-        raise SelectionInputError("selection must be all, cancel, indexes, or index ranges")
-    indexes: set[int] = set()
-    for token in (part.strip() for part in normalized.split(",")):
-        match = _RANGE.fullmatch(token)
-        if match is not None:
-            start, end = (int(match.group(1)), int(match.group(2)))
-            if start > end:
-                raise SelectionInputError("selection range must ascend")
-            indexes.update(range(start, end + 1))
-            continue
-        if _INDEX.fullmatch(token) is not None:
-            indexes.add(int(token))
-            continue
-        raise SelectionInputError("selection contains an invalid token")
-    if not indexes or min(indexes) < 1 or max(indexes) > len(candidates):
-        raise SelectionInputError("selection index is outside the displayed inventory")
-    return tuple(candidates[index - 1] for index in sorted(indexes))
 
 
 def _proposal_artifact(artifact: dict[str, Any]) -> bool:

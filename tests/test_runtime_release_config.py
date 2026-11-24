@@ -37,7 +37,9 @@ class RuntimeReleaseConfigTests(unittest.TestCase):
 
     def test_source_tree_keeps_only_the_current_runtime_manifest(self) -> None:
         manifests = sorted(path.name for path in (ROOT / "releases").glob("*.json"))
-        self.assertEqual(manifests, ["nlp-refinement-runtime-0.13.0.json"])
+        with (ROOT / "pyproject.toml").open("rb") as handle:
+            version = tomllib.load(handle)["project"]["version"]
+        self.assertEqual(manifests, [f"nlp-refinement-runtime-{version}.json"])
 
 
 if __name__ == "__main__":

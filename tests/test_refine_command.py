@@ -13,7 +13,6 @@ import unittest
 from pathlib import Path
 
 from nlp_refinement.refine import main, project_identity, project_key
-from unittest.mock import patch
 from nlp_refinement.state_store import StateStore
 
 
@@ -225,7 +224,7 @@ class RefineCommandTests(unittest.TestCase):
         self.assertTrue(rendered["no_model_call_attestation"])
         self.assertTrue(rendered["no_target_write_attestation"])
 
-    def test_tui_reviewer_bootstrap_does_not_require_an_assessor_transient_root(self) -> None:
+    def test_tui_reviewer_inline_handoff_does_not_require_an_assessor_transient_root(self) -> None:
         artifact = self.target / "AGENTS.md"
         artifact.write_text("# rules\n", encoding="utf-8")
         created = self.invoke(
@@ -234,22 +233,21 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(created.returncode, 0, created.stderr)
         run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
 
-        executable = self.temp_path / "runtime-venv" / "bin" / "nlp-refinement"
-        executable.parent.mkdir(parents=True)
-        executable.write_text("fixture", encoding="utf-8")
         captured = io.StringIO()
-        with patch("nlp_refinement.refine.sys.argv", [str(executable)]), redirect_stdout(captured):
+        with redirect_stdout(captured):
             self.assertEqual(
                 main([
-                    "--state-root", str(self.state_root), "tui-child-bootstrap", str(self.target),
+                    "--state-root", str(self.state_root), "tui-inline-handoff", str(self.target),
                     "--run-id", run_id, "--role", "reviewer",
                 ]),
                 0,
             )
 
-        rendered = json.loads(captured.getvalue())["child_bootstrap"]
+        rendered = json.loads(captured.getvalue())["inline_child_handoff"]
         self.assertEqual(rendered["role"], "reviewer")
-        self.assertIn("tui-review-handoff", rendered["prompt"])
+        self.assertIn("BEGIN-ROOT-INLINE-HANDOFF", rendered["prompt"])
+        self.assertNotIn("tui-review-handoff", rendered["prompt"])
+        self.assertNotIn("--state-root", rendered["prompt"])
 
     def test_tui_dispatch_receipt_is_persisted_before_scratch_cleanup(self) -> None:
         artifact = self.target / "AGENTS.md"
@@ -260,26 +258,23 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(created.returncode, 0, created.stderr)
         run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
         scratch = self.create_tui_scratch(run_id)
-        receipt = {
-            "receipt_schema": "tui-child-dispatch-receipt/v1",
-            "role": "reviewer",
-            "child_thread_id": "01a1eca4-a1f1-7820-8297-6845ff478aba",
-            "contract_sha256": "a" * 64,
-            "prompt_sha256": "b" * 64,
-            "prompt_utf8_bytes": 779,
-            "observed_cwd": "unverified",
-            "host_role_binding": "unverified",
-            "child_sandbox": "unverified",
-        }
-        receipt_file = scratch / "reviewer-dispatch-receipt.json"
-        receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+        inline = self.invoke(
+            "tui-inline-handoff", str(self.target), "--run-id", run_id, "--role", "reviewer",
+        )
+        self.assertEqual(inline.returncode, 0, inline.stderr)
+        prompt_file = scratch / "submitted-reviewer-prompt.txt"
+        prompt_file.write_text(
+            json.loads(inline.stdout)["inline_child_handoff"]["prompt"], encoding="utf-8",
+        )
 
         recorded = self.invoke(
-            "tui-record-child-dispatch-receipt", str(self.target), "--run-id", run_id,
-            "--receipt-file", str(receipt_file), "--transient-root", str(scratch),
+            "tui-record-generated-dispatch-receipt", str(self.target), "--run-id", run_id,
+            "--role", "reviewer", "--child-thread-id", "/root/test-reviewer",
+            "--submitted-prompt-file", str(prompt_file), "--transient-root", str(scratch),
         )
 
         self.assertEqual(recorded.returncode, 0, recorded.stderr)
+        receipt = json.loads(recorded.stdout)["receipt"]
         self.assertEqual(json.loads(recorded.stdout)["receipt"], receipt)
         cleaned = self.invoke(
             "tui-cleanup-transient-root", str(self.target), "--run-id", run_id, "--transient-root", str(scratch),
@@ -289,6 +284,71 @@ class RefineCommandTests(unittest.TestCase):
         self.assertEqual(listed.returncode, 0, listed.stderr)
         self.assertEqual(json.loads(listed.stdout)["receipts"], [receipt])
 
+    def test_tui_generated_dispatch_receipt_binds_the_exact_submitted_inline_prompt(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
+        scratch = self.create_tui_scratch(run_id)
+        inline = self.invoke(
+            "tui-inline-handoff", str(self.target), "--run-id", run_id, "--role", "reviewer",
+        )
+        self.assertEqual(inline.returncode, 0, inline.stderr)
+        submitted_prompt = scratch / "submitted-reviewer-prompt.txt"
+        submitted_prompt.write_text(
+            json.loads(inline.stdout)["inline_child_handoff"]["prompt"], encoding="utf-8",
+        )
+
+        recorded = self.invoke(
+            "tui-record-generated-dispatch-receipt", str(self.target), "--run-id", run_id,
+            "--role", "reviewer", "--child-thread-id", "/root/test-reviewer",
+            "--submitted-prompt-file", str(submitted_prompt), "--transient-root", str(scratch),
+        )
+
+        self.assertEqual(recorded.returncode, 0, recorded.stderr)
+        receipt = json.loads(recorded.stdout)["receipt"]
+        self.assertEqual(receipt["receipt_schema"], "tui-child-dispatch-receipt/v2")
+        self.assertEqual(receipt["child_thread_id"], "/root/test-reviewer")
+        self.assertEqual(receipt["role"], "reviewer")
+        self.assertEqual(receipt["observed_cwd"], "unverified")
+
+        listed = self.invoke("tui-child-dispatch-receipts", str(self.target), "--run-id", run_id)
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertEqual(json.loads(listed.stdout)["receipts"], [receipt])
+
+    def test_tui_generated_dispatch_receipt_rejects_a_changed_submitted_prompt(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
+        scratch = self.create_tui_scratch(run_id)
+        inline = self.invoke(
+            "tui-inline-handoff", str(self.target), "--run-id", run_id, "--role", "reviewer",
+        )
+        self.assertEqual(inline.returncode, 0, inline.stderr)
+        submitted_prompt = scratch / "submitted-reviewer-prompt.txt"
+        submitted_prompt.write_text(
+            json.loads(inline.stdout)["inline_child_handoff"]["prompt"] + " ", encoding="utf-8",
+        )
+
+        rejected = self.invoke(
+            "tui-record-generated-dispatch-receipt", str(self.target), "--run-id", run_id,
+            "--role", "reviewer", "--child-thread-id", "/root/test-reviewer",
+            "--submitted-prompt-file", str(submitted_prompt), "--transient-root", str(scratch),
+        )
+
+        self.assertEqual(rejected.returncode, 2)
+        self.assertIn("does not match generated bootstrap", rejected.stderr)
+        listed = self.invoke("tui-child-dispatch-receipts", str(self.target), "--run-id", run_id)
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertEqual(json.loads(listed.stdout)["receipts"], [])
+
     def test_tui_dispatch_receipts_allow_a_fresh_child_for_the_same_role_after_a_failed_attempt(self) -> None:
         artifact = self.target / "AGENTS.md"
         artifact.write_text("# rules\n", encoding="utf-8")
@@ -297,24 +357,90 @@ class RefineCommandTests(unittest.TestCase):
         )
         run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
         scratch = self.create_tui_scratch(run_id)
-        first = {
-            "receipt_schema": "tui-child-dispatch-receipt/v1", "role": "proposer",
-            "child_thread_id": "/root/first_proposer", "contract_sha256": "a" * 64,
-            "prompt_sha256": "b" * 64, "prompt_utf8_bytes": 700,
-            "observed_cwd": "unverified", "host_role_binding": "unverified", "child_sandbox": "unverified",
-        }
-        second = first | {"child_thread_id": "/root/fresh_proposer", "prompt_sha256": "c" * 64}
-        for number, receipt in enumerate((first, second), start=1):
-            receipt_path = scratch / f"proposer-{number}.json"
-            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+        inline = self.invoke(
+            "tui-inline-handoff", str(self.target), "--run-id", run_id, "--role", "reviewer",
+        )
+        self.assertEqual(inline.returncode, 0, inline.stderr)
+        prompt_file = scratch / "submitted-reviewer-prompt.txt"
+        prompt_file.write_text(
+            json.loads(inline.stdout)["inline_child_handoff"]["prompt"], encoding="utf-8",
+        )
+        receipts = []
+        for child_id in ("/root/first-reviewer", "/root/fresh-reviewer"):
             recorded = self.invoke(
-                "tui-record-child-dispatch-receipt", str(self.target), "--run-id", run_id,
-                "--receipt-file", str(receipt_path), "--transient-root", str(scratch),
+                "tui-record-generated-dispatch-receipt", str(self.target), "--run-id", run_id,
+                "--role", "reviewer", "--child-thread-id", child_id,
+                "--submitted-prompt-file", str(prompt_file), "--transient-root", str(scratch),
             )
             self.assertEqual(recorded.returncode, 0, recorded.stderr)
+            receipts.append(json.loads(recorded.stdout)["receipt"])
         listed = self.invoke("tui-child-dispatch-receipts", str(self.target), "--run-id", run_id)
         self.assertEqual(listed.returncode, 0, listed.stderr)
-        self.assertEqual(json.loads(listed.stdout)["receipts"], [first, second])
+        self.assertEqual(json.loads(listed.stdout)["receipts"], receipts)
+
+    def test_tui_does_not_expose_a_manual_dispatch_receipt_command(self) -> None:
+        help_result = self.invoke("--help")
+        self.assertEqual(help_result.returncode, 0, help_result.stderr)
+        self.assertNotIn("tui-record-child-dispatch-receipt", help_result.stdout)
+
+    def test_tui_dispatch_failure_blocks_without_retaining_host_error_text(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
+        scratch = self.create_tui_scratch(run_id)
+        failure = {
+            "receipt_schema": "tui-child-dispatch-failure/v1",
+            "role": "reviewer",
+            "contract_sha256": "a" * 64,
+            "handoff_sha256": "b" * 64,
+            "prompt_sha256": "c" * 64,
+            "prompt_utf8_bytes": 4_467,
+            "reason_code": "host-rejected",
+        }
+        failure_path = scratch / "reviewer-dispatch-failure.json"
+        failure_path.write_text(json.dumps(failure), encoding="utf-8")
+        recorded = self.invoke(
+            "tui-record-child-dispatch-failure", str(self.target), "--run-id", run_id,
+            "--failure-file", str(failure_path), "--transient-root", str(scratch),
+        )
+        self.assertEqual(recorded.returncode, 0, recorded.stderr)
+        self.assertEqual(json.loads(recorded.stdout)["state"], "BLOCKED")
+        events = StateStore(self.state_root / "state.db").list_events(run_id)
+        event = next(item for item in events if item["event_type"] == "tui-child-dispatch-failure")
+        self.assertEqual(event["payload"], failure)
+        self.assertNotIn("error", event["payload"])
+
+    def test_tui_output_failure_blocks_without_retaining_child_output(self) -> None:
+        artifact = self.target / "AGENTS.md"
+        artifact.write_text("# rules\n", encoding="utf-8")
+        created = self.invoke(
+            "batch-create", str(self.target), "--expected-inventory-hash", self.current_inventory_hash(),
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        run_id = str(json.loads(created.stdout)["batch"]["items"][0]["child_run_id"])
+        scratch = self.create_tui_scratch(run_id)
+        failure = {
+            "receipt_schema": "tui-child-output-failure/v1",
+            "role": "proposer",
+            "output_sha256": "d" * 64,
+            "reason_code": "schema-invalid",
+        }
+        failure_path = scratch / "proposer-output-failure.json"
+        failure_path.write_text(json.dumps(failure), encoding="utf-8")
+        recorded = self.invoke(
+            "tui-record-child-output-failure", str(self.target), "--run-id", run_id,
+            "--failure-file", str(failure_path), "--transient-root", str(scratch),
+        )
+        self.assertEqual(recorded.returncode, 0, recorded.stderr)
+        self.assertEqual(json.loads(recorded.stdout)["state"], "BLOCKED")
+        events = StateStore(self.state_root / "state.db").list_events(run_id)
+        event = next(item for item in events if item["event_type"] == "tui-child-output-failure")
+        self.assertEqual(event["payload"], failure)
+        self.assertNotIn("raw_output", event["payload"])
 
     def test_tui_assessment_commands_compose_v6_without_writing_the_ledger(self) -> None:
         artifact = self.target / "AGENTS.md"

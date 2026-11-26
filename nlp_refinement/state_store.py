@@ -105,8 +105,15 @@ RUN_OUTCOMES = {"IN_PROGRESS"} | TERMINAL_OUTCOMES
 TUI_CHILD_ROLES = {"reviewer", "proposer", "proposal-assessor"}
 TUI_CHILD_DISPATCH_RECEIPT_FIELDS = {
     "receipt_schema", "role", "child_thread_id", "contract_sha256", "prompt_sha256",
-    "prompt_utf8_bytes", "observed_cwd", "host_role_binding", "child_sandbox",
+    "handoff_sha256", "prompt_utf8_bytes", "observed_cwd", "host_role_binding", "child_sandbox",
 }
+TUI_CHILD_DISPATCH_FAILURE_FIELDS = {
+    "receipt_schema", "role", "contract_sha256", "handoff_sha256", "prompt_sha256",
+    "prompt_utf8_bytes", "reason_code",
+}
+TUI_CHILD_DISPATCH_FAILURE_REASONS = {"host-rejected", "host-unavailable", "permission-denied"}
+TUI_CHILD_OUTPUT_FAILURE_FIELDS = {"receipt_schema", "role", "output_sha256", "reason_code"}
+TUI_CHILD_OUTPUT_FAILURE_REASONS = {"schema-invalid", "snapshot-mismatch", "ledger-rejected"}
 
 
 def validate_finding_classification(subject_kind: str, evidence_plane: str, category: str) -> None:
@@ -1123,6 +1130,40 @@ class StateStore:
             ).fetchall()
         return [json.loads(row["payload_json"]) for row in rows]
 
+    def record_tui_child_dispatch_failure(
+        self, run_id: str, failure: dict[str, Any], now: int,
+    ) -> dict[str, Any]:
+        """Persist a bounded host-dispatch failure and block the run atomically."""
+        normalized = self._validate_tui_child_dispatch_failure(failure)
+        with self._transaction() as connection:
+            run = self._require_run(connection, run_id)
+            if run["state"] in FINAL_STATES:
+                raise InvalidTransition("cannot record a child dispatch failure for a final run")
+            run["state"] = "BLOCKED"
+            run["outcome"] = "BLOCKED"
+            updated = self._write_run(connection, run, now)
+            self._record_event(
+                connection, run_id, updated["revision"], "tui-child-dispatch-failure", normalized, now,
+            )
+        return {"failure": normalized, "run": updated}
+
+    def record_tui_child_output_failure(
+        self, run_id: str, failure: dict[str, Any], now: int,
+    ) -> dict[str, Any]:
+        """Persist a bounded rejected-child-output receipt and block the run."""
+        normalized = self._validate_tui_child_output_failure(failure)
+        with self._transaction() as connection:
+            run = self._require_run(connection, run_id)
+            if run["state"] in FINAL_STATES:
+                raise InvalidTransition("cannot record a child output failure for a final run")
+            run["state"] = "BLOCKED"
+            run["outcome"] = "BLOCKED"
+            updated = self._write_run(connection, run, now)
+            self._record_event(
+                connection, run_id, updated["revision"], "tui-child-output-failure", normalized, now,
+            )
+        return {"failure": normalized, "run": updated}
+
     def list_findings(self, run_id: str) -> list[dict[str, Any]]:
         with self._connection() as connection:
             rows = connection.execute(
@@ -1419,7 +1460,7 @@ class StateStore:
     def _validate_tui_child_dispatch_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         if set(receipt) != TUI_CHILD_DISPATCH_RECEIPT_FIELDS:
             raise ValueError("tui child dispatch receipt has unexpected fields")
-        if receipt["receipt_schema"] != "tui-child-dispatch-receipt/v1":
+        if receipt["receipt_schema"] != "tui-child-dispatch-receipt/v2":
             raise ValueError("tui child dispatch receipt schema is invalid")
         if receipt["role"] not in TUI_CHILD_ROLES:
             raise ValueError("tui child dispatch receipt role is invalid")
@@ -1432,16 +1473,48 @@ class StateStore:
             str(receipt["child_thread_id"]),
         ) is None or len(str(receipt["child_thread_id"]).encode("utf-8")) > 256:
             raise ValueError("tui child dispatch receipt thread ID is invalid")
-        for field in ("contract_sha256", "prompt_sha256"):
+        for field in ("contract_sha256", "handoff_sha256", "prompt_sha256"):
             if re.fullmatch(r"[a-f0-9]{64}", str(receipt[field])) is None:
                 raise ValueError(f"tui child dispatch receipt {field} is invalid")
         byte_count = receipt["prompt_utf8_bytes"]
-        if not isinstance(byte_count, int) or isinstance(byte_count, bool) or not 1 <= byte_count <= 1_000:
+        if not isinstance(byte_count, int) or isinstance(byte_count, bool) or byte_count < 1:
             raise ValueError("tui child dispatch receipt prompt_utf8_bytes is invalid")
         for field in ("observed_cwd", "host_role_binding", "child_sandbox"):
             if receipt[field] != "unverified":
                 raise ValueError(f"tui child dispatch receipt {field} must be unverified")
         return dict(receipt)
+
+    @staticmethod
+    def _validate_tui_child_dispatch_failure(failure: dict[str, Any]) -> dict[str, Any]:
+        if set(failure) != TUI_CHILD_DISPATCH_FAILURE_FIELDS:
+            raise ValueError("tui child dispatch failure has unexpected fields")
+        if failure["receipt_schema"] != "tui-child-dispatch-failure/v1":
+            raise ValueError("tui child dispatch failure schema is invalid")
+        if failure["role"] not in TUI_CHILD_ROLES:
+            raise ValueError("tui child dispatch failure role is invalid")
+        for field in ("contract_sha256", "handoff_sha256", "prompt_sha256"):
+            if re.fullmatch(r"[a-f0-9]{64}", str(failure[field])) is None:
+                raise ValueError(f"tui child dispatch failure {field} is invalid")
+        byte_count = failure["prompt_utf8_bytes"]
+        if not isinstance(byte_count, int) or isinstance(byte_count, bool) or byte_count < 1:
+            raise ValueError("tui child dispatch failure prompt_utf8_bytes is invalid")
+        if failure["reason_code"] not in TUI_CHILD_DISPATCH_FAILURE_REASONS:
+            raise ValueError("tui child dispatch failure reason_code is invalid")
+        return dict(failure)
+
+    @staticmethod
+    def _validate_tui_child_output_failure(failure: dict[str, Any]) -> dict[str, Any]:
+        if set(failure) != TUI_CHILD_OUTPUT_FAILURE_FIELDS:
+            raise ValueError("tui child output failure has unexpected fields")
+        if failure["receipt_schema"] != "tui-child-output-failure/v1":
+            raise ValueError("tui child output failure schema is invalid")
+        if failure["role"] not in TUI_CHILD_ROLES:
+            raise ValueError("tui child output failure role is invalid")
+        if re.fullmatch(r"[a-f0-9]{64}", str(failure["output_sha256"])) is None:
+            raise ValueError("tui child output failure output_sha256 is invalid")
+        if failure["reason_code"] not in TUI_CHILD_OUTPUT_FAILURE_REASONS:
+            raise ValueError("tui child output failure reason_code is invalid")
+        return dict(failure)
 
     @staticmethod
     def _require_artifact_refs(connection: sqlite3.Connection, run_id: str, refs: list[str]) -> None:

@@ -84,14 +84,15 @@ It only supplies a `ProposalHandoff` assembled from accepted StateStore data.
 8. For a changed artifact, root submits the recomputed SHA-256 to the existing
    StateStore `resume` transition, which persists `SNAPSHOT_STALE`; no old
    review or proposal is silently reused.
-9. Before every generic child creation, root obtains a versioned child contract
-   from the resolved CLI and passes its generated bootstrap verbatim. After
-   creation returns a thread ID, root creates a
-   `tui-child-dispatch-receipt/v1` that binds the exact submitted prompt's
-   SHA-256 and UTF-8 byte count to the generated bootstrap, contract SHA-256,
+9. Before every generic child creation, root obtains one complete,
+   root-verified inline contract and phase handoff from the resolved CLI and
+   passes its generated prompt verbatim. The child receives no ledger path or
+   contract-retrieval command. After creation returns a thread ID, root creates a
+   `tui-child-dispatch-receipt/v2` that binds the exact submitted prompt's
+   SHA-256 and UTF-8 byte count to the inline handoff SHA-256, contract SHA-256,
    role, and thread ID. No child output is accepted and no dependent phase may
-   start without this receipt. Root writes the receipt through the bounded
-   `tui-record-child-dispatch-receipt` adapter before transient cleanup; the
+   start without this receipt. Root asks the bounded
+   `tui-record-generated-dispatch-receipt` adapter to generate and persist the receipt before transient cleanup; the
    content-free event remains queryable through `tui-child-dispatch-receipts`.
    The receipt is root-attested protocol evidence;
    it is not host-enforced interception, native role binding, or sandbox proof.

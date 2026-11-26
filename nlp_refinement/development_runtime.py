@@ -32,11 +32,13 @@ TUI_NATIVE_REQUIRED_COMMANDS = (
     "tui-compose-assessed-proposal",
     "tui-create-transient-root",
     "tui-record-review",
-    "tui-record-child-dispatch-receipt",
+    "tui-record-generated-dispatch-receipt",
+    "tui-record-child-dispatch-failure",
+    "tui-record-child-output-failure",
     "tui-child-dispatch-receipts",
     "tui-cleanup-transient-root",
     "tui-child-contract",
-    "tui-child-bootstrap",
+    "tui-inline-handoff",
     "patch-proposal",
 )
 _DESCRIPTOR_SCHEMA = "nlp-refinement-development-runtime/v1"

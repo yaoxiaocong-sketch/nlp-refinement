@@ -18,9 +18,9 @@ from nlp_refinement.state_store import StateStore
 from nlp_refinement.tui_workflow import (
     SnapshotStaleError,
     WorkflowStateError,
-    build_child_bootstrap,
     build_child_dispatch_receipt,
     build_child_contract,
+    build_inline_child_handoff,
     build_proposal_handoff,
     build_proposal_assessment_handoff,
     build_reviewer_handoff,
@@ -236,71 +236,73 @@ class TuiWorkflowTests(unittest.TestCase):
         with self.assertRaises(PatchProposalInputError):
             validate_patch_proposal(proposal)
 
-    def test_bootstrap_is_bounded_and_retrieves_the_complete_contract_and_handoff_read_only(self) -> None:
-        reviewer_handoff = build_reviewer_handoff(self.store, self.root, self.run_id)
-        self.assertEqual(reviewer_handoff["artifact_relative_path"], "AGENTS.md")
-
-        reviewer = build_child_bootstrap(
-            role="reviewer",
-            executable=Path("/bin/echo"),
-            state_root=self.store.database_path.parent,
-            project_root=self.root,
-            run_id=self.run_id,
+    def test_inline_handoffs_are_unbounded_and_do_not_require_child_cli_or_state_access(self) -> None:
+        reviewer = build_inline_child_handoff(
+            role="reviewer", store=self.store, project_root=self.root, run_id=self.run_id,
         )
-        self.assertLessEqual(reviewer["prompt_utf8_bytes"], 1_000)
-        self.assertEqual(reviewer["prompt_sha256"], hashlib.sha256(reviewer["prompt"].encode("utf-8")).hexdigest())
-        self.assertIn("tui-child-contract --role reviewer", reviewer["prompt"])
-        self.assertIn("tui-review-handoff", reviewer["prompt"])
-
         self._accept_review()
-        proposer = build_child_bootstrap(
-            role="proposer",
-            executable=Path("/bin/echo"),
-            state_root=self.store.database_path.parent,
-            project_root=self.root,
-            run_id=self.run_id,
+        proposer = build_inline_child_handoff(
+            role="proposer", store=self.store, project_root=self.root, run_id=self.run_id,
         )
-        self.assertLessEqual(proposer["prompt_utf8_bytes"], 1_000)
-        self.assertIn("tui-proposal-handoff", proposer["prompt"])
-        self.assertIn(build_child_contract("proposer")["contract_sha256"], proposer["prompt"])
-
-        # The assessor adds an absolute transient-draft path to its second
-        # read-only command. Exercise the long absolute executable, state,
-        # target, and system-temporary paths used by isolated wheel acceptance.
-        long_root = self.root.parent / "nlp-refinement-0.12.1-acceptance" / "fixture-project"
-        long_root.mkdir(parents=True)
-        long_state_root = self.root.parent / "nlp-refinement-0.12.1-acceptance" / "state"
-        long_state_root.mkdir(parents=True)
-        long_executable = self.root.parent / "nlp-refinement-0.12.1-acceptance" / "venv" / "bin" / "nlp-refinement"
-        long_executable.parent.mkdir(parents=True)
-        long_executable.write_text("fixture", encoding="utf-8")
-        transient_root = create_tui_transient_root(long_root, "run_" + ("r" * 32))
-        draft_file = transient_root / "proposal-draft.json"
-        draft_file.write_text("{}", encoding="utf-8")
-        assessor = build_child_bootstrap(
-            role="proposal-assessor",
-            executable=long_executable,
-            state_root=long_state_root,
-            project_root=long_root,
-            run_id="run_" + ("r" * 32),
-            proposal_draft_file=draft_file,
-            transient_root=transient_root,
+        fixture = json.loads((ROOT / "fixtures/v6/patch-proposal-result.json").read_text(encoding="utf-8"))
+        draft = {
+            "schema_version": "proposal-draft/v1",
+            "phase_name": "proposal-draft",
+            "proposer_id": "tui-native-proposer",
+            "summary": fixture["summary"],
+            "base_snapshot_hash": self.snapshot,
+            "review_artifact_id": proposer["phase_handoff"]["review_artifact_id"],
+            "no_target_write_attestation": True,
+            "proposals": [
+                {key: value for key, value in fixture["proposals"][0].items() if key != "assessment"}
+            ],
+        }
+        draft["proposals"][0]["finding_id"] = proposer["phase_handoff"]["open_finding_ids"][0]
+        draft["proposals"][0]["causal_evidence_refs"] = [draft["review_artifact_id"]]
+        assessor = build_inline_child_handoff(
+            role="proposal-assessor", store=self.store, project_root=self.root, run_id=self.run_id,
+            proposal_draft=draft,
         )
-        self.assertLessEqual(assessor["prompt_utf8_bytes"], 1_000)
-        self.assertIn("tui-proposal-draft-handoff", assessor["prompt"])
 
-        for bootstrap in (reviewer, proposer, assessor):
+        for inline in (reviewer, proposer, assessor):
+            self.assertGreater(inline["prompt_utf8_bytes"], 1_000)
+            self.assertEqual(inline["prompt_sha256"], hashlib.sha256(inline["prompt"].encode("utf-8")).hexdigest())
+            self.assertTrue(inline["prompt"].endswith("\n"))
+            self.assertEqual(len(inline["handoff_sha256"]), 64)
+            self.assertIn("BEGIN-ROOT-INLINE-HANDOFF", inline["prompt"])
+            self.assertNotIn("--state-root", inline["prompt"])
+            self.assertNotIn("state.db", inline["prompt"])
+            self.assertNotIn("sqlite", inline["prompt"].lower())
+            self.assertNotIn("tui-review-handoff", inline["prompt"])
+            self.assertNotIn("tui-proposal-handoff", inline["prompt"])
+            self.assertNotIn("tui-proposal-draft-handoff", inline["prompt"])
             receipt = build_child_dispatch_receipt(
-                bootstrap, submitted_prompt=str(bootstrap["prompt"]), child_thread_id="thread-fixture",
+                inline, submitted_prompt=str(inline["prompt"]), child_thread_id="thread-fixture",
             )
-            self.assertEqual(receipt["role"], bootstrap["role"])
-            self.assertEqual(receipt["prompt_sha256"], bootstrap["prompt_sha256"])
+            self.assertEqual(receipt["receipt_schema"], "tui-child-dispatch-receipt/v2")
+            self.assertEqual(receipt["role"], inline["role"])
+            self.assertEqual(receipt["prompt_sha256"], inline["prompt_sha256"])
+            self.assertEqual(receipt["handoff_sha256"], inline["handoff_sha256"])
             self.assertEqual(receipt["observed_cwd"], "unverified")
             with self.assertRaisesRegex(WorkflowStateError, "does not match"):
                 build_child_dispatch_receipt(
-                    bootstrap, submitted_prompt=str(bootstrap["prompt"]) + " ",
+                    inline, submitted_prompt=str(inline["prompt"]) + " ",
                     child_thread_id="thread-fixture",
                 )
+
+    def test_inline_handoff_delivers_root_verified_reviewer_facts_without_child_cli_access(self) -> None:
+        inline = build_inline_child_handoff(
+            role="reviewer", store=self.store, project_root=self.root, run_id=self.run_id,
+        )
+
+        self.assertEqual(inline["inline_handoff_version"], "tui-inline-handoff/v1")
+        self.assertEqual(inline["role"], "reviewer")
+        self.assertEqual(inline["phase_handoff"]["snapshot_hash"], self.snapshot)
+        self.assertGreater(inline["prompt_utf8_bytes"], 1_000)
+        self.assertNotIn("tui-review-handoff", inline["prompt"])
+        self.assertNotIn("--state-root", inline["prompt"])
+        self.assertNotIn("state.db", inline["prompt"])
+        self.assertNotIn("sqlite", inline["prompt"].lower())
 
     def test_tui_transient_files_must_be_private_system_temporary_files_outside_project_root(self) -> None:
         transient_root = create_tui_transient_root(self.root, self.run_id)
@@ -348,10 +350,7 @@ class TuiWorkflowTests(unittest.TestCase):
 
     def test_skill_dispatches_generic_children_with_cli_generated_contracts(self) -> None:
         skill = (ROOT / ".agents/skills/nlp-review-propose/SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("tui-child-contract --role reviewer", skill)
-        self.assertIn("tui-child-contract --role proposer", skill)
-        self.assertIn("tui-child-contract --role proposal-assessor", skill)
-        self.assertIn("tui-child-bootstrap", skill)
+        self.assertIn("tui-inline-handoff", skill)
         self.assertIn("prompt_sha256", skill)
         self.assertIn("tui-create-transient-root", skill)
         self.assertIn("tui-record-review", skill)
@@ -360,8 +359,9 @@ class TuiWorkflowTests(unittest.TestCase):
         self.assertIn("cwd: unverified", skill)
         self.assertIn("Do not block the workflow solely because cwd is unobservable", skill)
         self.assertIn("create_thread", skill)
-        self.assertIn("tui-child-dispatch-receipt/v1", skill)
-        self.assertIn("tui-record-child-dispatch-receipt", skill)
+        self.assertIn("tui-child-dispatch-receipt/v2", skill)
+        self.assertIn("tui-record-generated-dispatch-receipt", skill)
+        self.assertIn("tui-record-child-output-failure", skill)
         self.assertIn("tui-child-dispatch-receipts", skill)
         self.assertIn("root-attested protocol receipt", skill)
         self.assertIn("do not accept the child output", skill)
@@ -369,6 +369,8 @@ class TuiWorkflowTests(unittest.TestCase):
         self.assertIn("required_target_invariant_by_finding", skill)
         self.assertIn("generic TUI child context", skill)
         self.assertIn("`.toml` role file was loaded", skill)
+        self.assertIn("child must not", skill)
+        self.assertIn("read a ledger", skill)
         self.assertIn("policy-observe", skill)
         self.assertIn("capability-review status", skill)
         self.assertIn("$nlp-review-propose maintenance", skill)

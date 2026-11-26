@@ -36,7 +36,7 @@ For every other request, explain that this Skill has only these three entries.
      `tui-resume-locators`, `tui-resume-candidates`, `tui-workflow-disposition`,
      `tui-proposal-handoff`, `tui-proposal-draft-handoff`, and
      `tui-compose-assessed-proposal`, `tui-child-contract`,
-     `tui-record-child-dispatch-receipt`, and `tui-child-dispatch-receipts`; then use only its reported absolute
+     `tui-record-generated-dispatch-receipt`, and `tui-child-dispatch-receipts`; then use only its reported absolute
      `executable`.
    - If either check fails, stop before any Batch, model call, or target write.
      Do not fall back to `python -m`, `PYTHONPATH`, a guessed cache path, or a
@@ -61,28 +61,36 @@ For every other request, explain that this Skill has only these three entries.
    If the host exposes root or child cwd, record it as diagnostic evidence. Otherwise record `cwd: unverified` and
    do not claim worktree binding or child sandbox isolation. Do not block the workflow solely because cwd is unobservable
    when all required paths are explicitly bound and verified.
-5. The native `create_thread` API accepts at most 1,000 UTF-8 bytes. Before every generic child, call
-   `tui-child-contract --role <reviewer|proposer|proposal-assessor>` and the phase handoff builder, then call
-   `tui-child-bootstrap <root> --run-id <run-id> --role <role>` (for assessor also pass its transient validated
-   `--proposal-draft-file`). Pass only the returned `child_bootstrap.prompt` to `create_thread`; it is bounded
-   below 1,000 bytes and contains one root-generated read-only shell command that runs exactly two CLI retrieval calls. The child first runs that command to retrieve
-   the complete generated `child_contract` and phase handoff verbatim, verifies the returned role and
-   `contract_sha256`, and only then performs its role. After `create_thread` returns a child thread ID, the root
-   must produce a `tui-child-dispatch-receipt/v1` before accepting that child's output or starting a dependent
-   phase. This root-attested protocol receipt records the role and the exact opaque child handle returned by
-   the host (for example, a UUID-like ID or a canonical task path such as `/root/resume_proposer`), `contract_sha256`,
-   `prompt_sha256`, `prompt_utf8_bytes`, and `observed_cwd` (or `unverified`), and marks
-   `host_role_binding` and `child_sandbox` as `unverified`. Treat the returned prompt as opaque: immediately
-   before `create_thread`, recompute SHA-256 and byte count over the exact submitted text and stop if either
-   differs from `child_bootstrap`. Write the content-free receipt only inside the run's transient root, then invoke
-   `tui-record-child-dispatch-receipt <root> --run-id <run-id> --receipt-file <transient-file> --transient-root <transient-root>`;
-   require its persisted receipt to match before accepting output. Before cleanup, obtain the root's bounded audit
-   view with `tui-child-dispatch-receipts <root> --run-id <run-id>`. If the root cannot create or persist this
-   receipt, mark the run `BLOCKED`; do not accept the child output and do not create a dependent child. This is evidence of the root's submitted text, not a
+5. Before every generic child, call `tui-inline-handoff <root> --run-id <run-id> --role <role>` (for assessor also
+   pass its transient validated `--proposal-draft-file`). Pass only the returned `inline_child_handoff.prompt` to
+   `create_thread`. It contains the complete root-verified contract and phase handoff inline: the child must not
+   run a CLI command, read a ledger, receive a state-root path, or inspect files. The CLI records the prompt's
+   UTF-8 byte count and SHA-256 but imposes no project-local host-input limit. If the host rejects child creation,
+   write only the generated role, contract/handoff/prompt digests, prompt byte count, and one bounded reason code
+   (`host-rejected`, `host-unavailable`, or `permission-denied`) into the transient root. Then call
+   `tui-record-child-dispatch-failure <root> --run-id <run-id> --failure-file <transient-file> --transient-root <transient-root>`.
+   This atomically marks the run `BLOCKED`; do not preserve host error text, accept output, or start a dependent phase.
+   If a child exists but its raw final JSON fails schema, snapshot, or ledger validation, do not repair it. Write only its
+   SHA-256, role, and one bounded reason code (`schema-invalid`, `snapshot-mismatch`, or `ledger-rejected`) to the
+   transient root and call `tui-record-child-output-failure` with the same root, run, failure-file, and transient-root
+   arguments. This also atomically marks the run `BLOCKED` before any dependent phase.
+   Before `create_thread`, write the returned `inline_child_handoff.prompt` unchanged as UTF-8 bytes to a private
+   `submitted-prompt.txt` under the run's transient root. Pass exactly that text to `create_thread`; do not pretty-print,
+   reserialize, prepend, append, or reconstruct it. After `create_thread` returns a child thread ID, immediately invoke
+   `tui-record-generated-dispatch-receipt <root> --run-id <run-id> --role <role> --child-thread-id <child-id>
+   --submitted-prompt-file <submitted-prompt.txt> --transient-root <transient-root>` (and, for an assessor,
+   `--proposal-draft-file <validated-draft>`). The CLI rebuilds the current inline packet, checks the exact submitted
+   UTF-8 bytes and SHA-256, generates the exact root-attested protocol receipt
+   `tui-child-dispatch-receipt/v2` shape, and persists it before output is read. It records the role, opaque child handle, `contract_sha256`, `handoff_sha256`, `prompt_sha256`,
+   `prompt_utf8_bytes`, and `observed_cwd: unverified`, and marks `host_role_binding` and `child_sandbox` as
+   `unverified`. Require a successful persisted receipt before accepting output or starting a dependent phase. If this
+   adapter fails, stop this run before reading child output, do not accept the child output, report the bounded adapter error, and do not create a
+   dependent child; a later resume must create a fresh child rather than rely on the unreceipted one. Before cleanup,
+   obtain the root's bounded audit view with `tui-child-dispatch-receipts <root> --run-id <run-id>`. This is evidence of
+   the root's submitted text, not a
    host-enforced interception of `create_thread`. A role file in `.codex/agents/` is a
    human-reviewable specification; a generic TUI child context does not prove that a `.toml` role file was loaded.
-   The only permitted contract-retrieval commands are `tui-child-contract --role reviewer`,
-   `tui-child-contract --role proposer`, and `tui-child-contract --role proposal-assessor`.
+   The root is the only ledger reader and handoff builder; child contract retrieval commands are not permitted.
 6. Process AUTO-policy runs in ascending relative-path order.
 7. Create a proposer child only after the review output passes schema and
    snapshot checks and the review artifact plus findings are accepted in the ledger.
@@ -115,9 +123,8 @@ For every other request, explain that this Skill has only these three entries.
 7. For each created run, build the snapshot-bound reviewer handoff, then call
    `tui-create-transient-root <root> --run-id <run-id>` once and retain the returned private system-temporary
    directory for the whole run. It must be outside the project root. Never create child output, draft, or assessment
-   JSON in the project root. Then call `tui-child-bootstrap <root> --run-id <run-id> --role reviewer`. Create the generic reviewer with only its
-   returned bounded bootstrap prompt. The reviewer retrieves the complete contract and reviewer handoff through
-   its two exact read-only bootstrap commands; do not put artifact content in `create_thread`.
+   JSON in the project root. Then call `tui-inline-handoff <root> --run-id <run-id> --role reviewer`. Create the
+   generic reviewer with only its returned complete inline prompt.
 8. Wait for the reviewer final output. Write its one JSON object only inside that returned transient directory,
    then call `tui-record-review <root> --run-id <run-id> --review-result-file <transient-file>
    --transient-root <transient-root> --observed-snapshot-hash <hash> --redaction-status caller-attested-redacted`.
@@ -132,18 +139,16 @@ For every other request, explain that this Skill has only these three entries.
     proposer for that run.
 11. Build ProposalHandoff from the accepted ledger record only when the
     snapshot still matches.
-12. Call `tui-child-bootstrap <root> --run-id <run-id> --role proposer`, then create the proposer with its
-    bounded bootstrap prompt. It retrieves the complete contract, ProposalHandoff, and matching artifact model
-    view through its two exact read-only commands. Wait for one `proposal-draft/v1` object. Validate its binding,
+12. Call `tui-inline-handoff <root> --run-id <run-id> --role proposer`, then create the proposer with its complete
+   inline prompt. Wait for one `proposal-draft/v1` object. Validate its binding,
     exact `required_target_invariant_by_finding` linkage, and unified-diff syntax, then build the ProposalAssessmentHandoff without a
     ledger write. If invalid, discard it; root must not normalize, edit, or
     retry its JSON in-place.
 13. Keep the validated draft and assessment only in the returned restrictive transient directory. Pass
     `--transient-root <transient-root>` to `tui-proposal-draft-handoff` and `tui-compose-assessed-proposal`;
     those commands reject a project-root file. Then use the draft only for the existing draft-handoff validator;
-    call `tui-child-bootstrap <root> --run-id <run-id> --role proposal-assessor --proposal-draft-file <path>`, then
-    create a fresh assessor with its bounded bootstrap prompt. It retrieves the complete contract and assessment
-    handoff through its two exact read-only commands. Delete transient draft/assessment files after this phase.
+   call `tui-inline-handoff <root> --run-id <run-id> --role proposal-assessor --proposal-draft-file <path>`, then
+   create a fresh assessor with its complete inline prompt. Delete transient draft/assessment files after this phase.
     Wait for one `proposal-assessment/v1` object. Its assessor ID must differ
     from the proposer's ID, and it must bind to the exact draft SHA-256,
     accepted review artifact, and snapshot.
@@ -174,8 +179,8 @@ For every other request, explain that this Skill has only these three entries.
    outcome `SNAPSHOT_STALE`, and do not reuse findings or create a child.
 5. Only for an unchanged snapshot: for `NEEDS_REVIEW` or `NEEDS_PROPOSAL`, first create a fresh
    `tui-create-transient-root <root> --run-id <run-id>` directory; never reuse an older root's transient files.
-   For `NEEDS_REVIEW`, create a new reviewer child through its bounded generated bootstrap. For `NEEDS_PROPOSAL`, build
-   ProposalHandoff, create a new proposer child through its bounded generated bootstrap, then a new independent assessor
+   For `NEEDS_REVIEW`, create a new reviewer child through a fresh root-inline handoff. For `NEEDS_PROPOSAL`, build
+   ProposalHandoff, create a new proposer child through a fresh root-inline handoff, then a new independent assessor
    child if the transient draft validates. Do not restore a previous draft or
    assessment. For `AWAITING_HUMAN`, show the accepted proposal without rerunning
    a child.

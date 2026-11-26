@@ -199,14 +199,35 @@ def build_parser() -> argparse.ArgumentParser:
     tui_review_record.add_argument(
         "--redaction-status", choices=("caller-attested-redacted",), required=True,
     )
-    tui_receipt = subcommands.add_parser(
-        "tui-record-child-dispatch-receipt",
-        help="persist one content-free root-attested native-child dispatch receipt",
+    tui_generated_receipt = subcommands.add_parser(
+        "tui-record-generated-dispatch-receipt",
+        help="verify one exact submitted inline prompt and persist its generated dispatch receipt",
     )
-    tui_receipt.add_argument("root", type=Path)
-    tui_receipt.add_argument("--run-id", required=True)
-    tui_receipt.add_argument("--receipt-file", type=Path, required=True)
-    tui_receipt.add_argument("--transient-root", type=Path, required=True)
+    tui_generated_receipt.add_argument("root", type=Path)
+    tui_generated_receipt.add_argument("--run-id", required=True)
+    tui_generated_receipt.add_argument(
+        "--role", choices=("reviewer", "proposer", "proposal-assessor"), required=True,
+    )
+    tui_generated_receipt.add_argument("--child-thread-id", required=True)
+    tui_generated_receipt.add_argument("--submitted-prompt-file", type=Path, required=True)
+    tui_generated_receipt.add_argument("--transient-root", type=Path, required=True)
+    tui_generated_receipt.add_argument("--proposal-draft-file", type=Path)
+    tui_dispatch_failure = subcommands.add_parser(
+        "tui-record-child-dispatch-failure",
+        help="persist one bounded native-child creation failure and block the run",
+    )
+    tui_dispatch_failure.add_argument("root", type=Path)
+    tui_dispatch_failure.add_argument("--run-id", required=True)
+    tui_dispatch_failure.add_argument("--failure-file", type=Path, required=True)
+    tui_dispatch_failure.add_argument("--transient-root", type=Path, required=True)
+    tui_output_failure = subcommands.add_parser(
+        "tui-record-child-output-failure",
+        help="persist one bounded rejected-child-output receipt and block the run",
+    )
+    tui_output_failure.add_argument("root", type=Path)
+    tui_output_failure.add_argument("--run-id", required=True)
+    tui_output_failure.add_argument("--failure-file", type=Path, required=True)
+    tui_output_failure.add_argument("--transient-root", type=Path, required=True)
     tui_receipts = subcommands.add_parser(
         "tui-child-dispatch-receipts",
         help="read content-free persisted native-child dispatch receipts for one run",
@@ -237,17 +258,17 @@ def build_parser() -> argparse.ArgumentParser:
     tui_contract.add_argument(
         "--role", choices=("reviewer", "proposer", "proposal-assessor"), required=True,
     )
-    tui_bootstrap = subcommands.add_parser(
-        "tui-child-bootstrap",
-        help="render a bounded native-child bootstrap prompt without creating a child",
+    tui_inline_handoff = subcommands.add_parser(
+        "tui-inline-handoff",
+        help="render one complete root-verified native-child input without creating a child",
     )
-    tui_bootstrap.add_argument("root", type=Path)
-    tui_bootstrap.add_argument("--run-id", required=True)
-    tui_bootstrap.add_argument(
+    tui_inline_handoff.add_argument("root", type=Path)
+    tui_inline_handoff.add_argument("--run-id", required=True)
+    tui_inline_handoff.add_argument(
         "--role", choices=("reviewer", "proposer", "proposal-assessor"), required=True,
     )
-    tui_bootstrap.add_argument("--proposal-draft-file", type=Path)
-    tui_bootstrap.add_argument("--transient-root", type=Path)
+    tui_inline_handoff.add_argument("--proposal-draft-file", type=Path)
+    tui_inline_handoff.add_argument("--transient-root", type=Path)
 
     status = subcommands.add_parser("status", help="read a run without changing it")
     status.add_argument("--run-id", required=True)
@@ -609,28 +630,83 @@ def tui_record_review(args: argparse.Namespace, store: StateStore) -> int:
     return review(args, store)
 
 
-def tui_record_child_dispatch_receipt(args: argparse.Namespace, store: StateStore) -> int:
-    from nlp_refinement.tui_workflow import validate_tui_transient_file
+def tui_record_generated_dispatch_receipt(args: argparse.Namespace, store: StateStore) -> int:
+    """Persist a receipt only when root's submitted text equals the generated packet."""
+    from nlp_refinement.tui_workflow import build_child_dispatch_receipt, validate_tui_transient_file
 
     _verify_tui_project_run(args, store)
-    receipt_path = validate_tui_transient_file(
+    prompt_path = validate_tui_transient_file(
         project_root=args.root,
         transient_root=args.transient_root,
-        candidate=args.receipt_file,
+        candidate=args.submitted_prompt_file,
         run_id=args.run_id,
-        kind="child dispatch receipt",
+        kind="submitted child prompt",
     )
-    receipt = _load_tui_json(receipt_path, kind="child dispatch receipt")
+    try:
+        submitted_prompt = prompt_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise ValueError("submitted child prompt must be readable UTF-8 text") from error
+    inline_handoff = _build_tui_inline_handoff(args, store)
+    receipt = build_child_dispatch_receipt(
+        inline_handoff,
+        submitted_prompt=submitted_prompt,
+        child_thread_id=args.child_thread_id,
+    )
     persisted = store.record_tui_child_dispatch_receipt(args.run_id, receipt, now_epoch())
     output(
         {
-            "command": "tui-record-child-dispatch-receipt",
+            "command": "tui-record-generated-dispatch-receipt",
             "run_id": args.run_id,
             "receipt": persisted,
             "no_model_call_attestation": True,
             "no_target_write_attestation": True,
         }
     )
+    return 0
+
+
+def tui_record_child_dispatch_failure(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import validate_tui_transient_file
+
+    _verify_tui_project_run(args, store)
+    failure_path = validate_tui_transient_file(
+        project_root=args.root,
+        transient_root=args.transient_root,
+        candidate=args.failure_file,
+        run_id=args.run_id,
+        kind="child dispatch failure",
+    )
+    failure = _load_tui_json(failure_path, kind="child dispatch failure")
+    recorded = store.record_tui_child_dispatch_failure(args.run_id, failure, now_epoch())
+    public = public_status(recorded["run"], len(store.list_events(args.run_id)))
+    public.update(
+        {
+            "command": "tui-record-child-dispatch-failure",
+            "failure": recorded["failure"],
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    output(public)
+    return 0
+
+
+def tui_record_child_output_failure(args: argparse.Namespace, store: StateStore) -> int:
+    from nlp_refinement.tui_workflow import validate_tui_transient_file
+
+    _verify_tui_project_run(args, store)
+    failure_path = validate_tui_transient_file(
+        project_root=args.root, transient_root=args.transient_root,
+        candidate=args.failure_file, run_id=args.run_id, kind="child output failure",
+    )
+    failure = _load_tui_json(failure_path, kind="child output failure")
+    recorded = store.record_tui_child_output_failure(args.run_id, failure, now_epoch())
+    public = public_status(recorded["run"], len(store.list_events(args.run_id)))
+    public.update({
+        "command": "tui-record-child-output-failure", "failure": recorded["failure"],
+        "no_model_call_attestation": True, "no_target_write_attestation": True,
+    })
+    output(public)
     return 0
 
 
@@ -662,9 +738,21 @@ def tui_child_contract(args: argparse.Namespace) -> int:
     return 0
 
 
-def tui_child_bootstrap(args: argparse.Namespace, store: StateStore) -> int:
+def tui_inline_handoff(args: argparse.Namespace, store: StateStore) -> int:
+    output(
+        {
+            "command": "tui-inline-handoff",
+            "inline_child_handoff": _build_tui_inline_handoff(args, store),
+            "no_model_call_attestation": True,
+            "no_target_write_attestation": True,
+        }
+    )
+    return 0
+
+
+def _build_tui_inline_handoff(args: argparse.Namespace, store: StateStore) -> dict[str, Any]:
     from nlp_refinement.tui_workflow import (
-        build_child_bootstrap,
+        build_inline_child_handoff,
         build_proposal_assessment_handoff,
         build_proposal_handoff,
         build_reviewer_handoff,
@@ -672,13 +760,10 @@ def tui_child_bootstrap(args: argparse.Namespace, store: StateStore) -> int:
     )
 
     transient_root = args.transient_root
-    if args.role == "reviewer":
-        build_reviewer_handoff(store, args.root, args.run_id)
-    elif args.role == "proposer":
-        build_proposal_handoff(store, args.root, args.run_id)
-    else:
+    proposal_draft = None
+    if args.role == "proposal-assessor":
         if args.proposal_draft_file is None:
-            raise ValueError("proposal assessor bootstrap requires --proposal-draft-file")
+            raise ValueError("proposal assessor inline handoff requires --proposal-draft-file")
         transient_root = args.transient_root or args.proposal_draft_file.parent
         draft_path = validate_tui_transient_file(
             project_root=args.root,
@@ -687,27 +772,17 @@ def tui_child_bootstrap(args: argparse.Namespace, store: StateStore) -> int:
             run_id=args.run_id,
             kind="proposal draft",
         )
-        draft = _load_tui_json(draft_path, kind="proposal draft")
+        proposal_draft = _load_tui_json(draft_path, kind="proposal draft")
         build_proposal_assessment_handoff(
-            draft, build_proposal_handoff(store, args.root, args.run_id),
+            proposal_draft, build_proposal_handoff(store, args.root, args.run_id),
         )
-    output(
-        {
-            "command": "tui-child-bootstrap",
-            "child_bootstrap": build_child_bootstrap(
-                role=args.role,
-                executable=invoked_cli_path(),
-                state_root=args.state_root,
-                project_root=args.root,
-                run_id=args.run_id,
-                proposal_draft_file=args.proposal_draft_file,
-                transient_root=transient_root,
-            ),
-            "no_model_call_attestation": True,
-            "no_target_write_attestation": True,
-        }
+    return build_inline_child_handoff(
+        role=args.role,
+        store=store,
+        project_root=args.root,
+        run_id=args.run_id,
+        proposal_draft=proposal_draft,
     )
-    return 0
 
 
 def _load_tui_json(path: Path, *, kind: str) -> dict[str, Any]:
@@ -962,12 +1037,16 @@ def main(argv: list[str] | None = None) -> int:
             return tui_cleanup_transient_root(args, store)
         if args.command == "tui-record-review":
             return tui_record_review(args, store)
-        if args.command == "tui-record-child-dispatch-receipt":
-            return tui_record_child_dispatch_receipt(args, store)
+        if args.command == "tui-record-generated-dispatch-receipt":
+            return tui_record_generated_dispatch_receipt(args, store)
+        if args.command == "tui-record-child-dispatch-failure":
+            return tui_record_child_dispatch_failure(args, store)
+        if args.command == "tui-record-child-output-failure":
+            return tui_record_child_output_failure(args, store)
         if args.command == "tui-child-dispatch-receipts":
             return tui_child_dispatch_receipts(args, store)
-        if args.command == "tui-child-bootstrap":
-            return tui_child_bootstrap(args, store)
+        if args.command == "tui-inline-handoff":
+            return tui_inline_handoff(args, store)
         if args.command == "tui-proposal-draft-handoff":
             return tui_proposal_draft_handoff(args, store)
         if args.command == "tui-compose-assessed-proposal":

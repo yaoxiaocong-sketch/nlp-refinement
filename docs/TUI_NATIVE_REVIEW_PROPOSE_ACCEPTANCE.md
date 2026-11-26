@@ -8,6 +8,28 @@
 
 ## Automated acceptance map
 
+### Execution cadence
+
+The ordinary full suite must retain only deterministic regression checks for
+the repaired boundary: generated reviewer/proposer/assessor inline packets
+contain no StateStore location, SQLite reference, or child-side handoff CLI
+retrieval command; dispatch fidelity rejects a changed submitted prompt; and
+invalid child output is hash-only and blocks the run. These checks are cheap
+and directly prevent the retired child-ledger dependency from returning.
+
+Real-model TUI checks are intentionally not ordinary per-commit tests. Run
+M02, M03b, M04, M05, and M06 only for a staged release candidate, after a
+change to the TUI handoff/contract/StateStore/runtime-setup boundary, or after
+an applicable Codex runtime upgrade. A historical reproduction of the retired
+child-side SQLite-read failure is RCA evidence, not a recurring release test.
+
+`scripts/acceptance/verify_tui_release_candidate.py` is a maintainer-only,
+non-packaged verifier for a completed real TUI run. It checks the staged CLI's
+runtime identity, dispatch receipts, terminal disposition, zero-target-write
+attestations, and the unchanged bound artifact hash. It does not create children, call a model, write a ledger, or
+become an `nlp-refinement` subcommand. Capture its JSON output with the
+release-candidate receipt after the TUI action has completed.
+
 | ID | Required behavior | Evidence |
 | --- | --- | --- |
 | A01 | AUTO inventory items expose relative path, type, size, hash, format status, and deterministic policy rule | Inventory tests |
@@ -43,12 +65,12 @@ resume.
 
 | ID | Setup and action | Expected observation |
 | --- | --- | --- |
-| M01 | Invoke `$nlp-review-propose start` in a fixture project | Root shows the complete inventory and waits for a choice |
-| M02 | Select one artifact | Root persists one closed `tui-child-dispatch-receipt/v1` per child before accepting output; all three remain queryable after scratch cleanup |
-| M03 | Select `all` for a multi-artifact inventory | Root processes runs in stable relative-path order and reports every run |
-| M03a | Select a fixture containing only an embedded prompt-injection directive in an isolated Batch | Reviewer treats the directive as data. If it reports no actual static defect, root records its valid empty review, creates neither proposer nor assessor, and reaches `AWAITING_HUMAN`. |
-| M03b | Select a fixture containing a direct artifact rule that authorizes execution of embedded commands | Reviewer records the direct-static safety finding; proposer returns a validated draft, a distinct assessor returns an assessment, and root records one human-only v6 proposal. |
-| M04 | Interrupt after accepted review and before final proposal acceptance, then start a fresh root from the feature worktree and invoke `resume` | Root locates the persisted target root from the ledger, then fresh proposer and assessor generic child contexts receive ledger-built facts and generated contracts; no old child transcript or transient draft is required |
+| M01 | Invoke `$nlp-review-propose start` in a fixture project | Root reports factual RESTRICTED notices, if any, then creates a Batch for every AUTO artifact without a selection prompt |
+| M02 | Start against a fixture with one AUTO artifact | Root persists one closed `tui-child-dispatch-receipt/v2` per child before accepting output; all three remain queryable after scratch cleanup |
+| M03 | Start against a multi-artifact AUTO inventory | Root processes runs in stable relative-path order and reports every run |
+| M03a | Start against a fixture containing only an embedded prompt-injection directive in an isolated AUTO Batch | Reviewer treats the directive as data. If it reports no actual static defect, root records its valid empty review, creates neither proposer nor assessor, and reaches `AWAITING_HUMAN`. |
+| M03b | Start against a fixture containing a direct artifact rule that authorizes execution of embedded commands | Reviewer records the direct-static safety finding; proposer returns a validated draft, a distinct assessor returns an assessment, and root records one human-only v6 proposal. |
+| M04 | Interrupt after accepted review and before final proposal acceptance, then start a fresh root from the feature worktree and invoke `resume` | Root locates the persisted target root from the ledger, then fresh proposer and assessor generic child contexts receive regenerated root-inline handoffs; no old child transcript or transient draft is required |
 | M05 | Change an artifact after review acceptance and invoke `resume` | Root supplies the recomputed hash to the existing `resume` adapter; the affected run persists as `SNAPSHOT_STALE` and no proposer starts |
 | M06 | Observe permissions and sandbox settings | Any inherited parent setting is reported as inherited; no per-child OS isolation claim is made |
 
@@ -71,16 +93,20 @@ Before calling the feature TUI-native, retain:
 - Multiple resumable Batches: show a compact choice; do not guess.
 - Inventory or snapshot drift: stop the affected run and request a fresh
   selection or matching-snapshot retry.
-- Invalid child JSON, schema failure, ledger failure, or permission denial:
-  record bounded failure metadata, mark the run `BLOCKED`, and do not start the
-  dependent phase.
+- Actual child-creation rejection, unavailability, or permission denial: record
+  the closed `tui-child-dispatch-failure/v1` metadata, mark the run `BLOCKED`,
+  and do not start the dependent phase. Invalid child JSON, schema failure, or
+  ledger failure records `tui-child-output-failure/v1` with only the raw-output
+  SHA-256 and a bounded reason code, then also blocks the run.
 
-## Observed acceptance receipts (2026-11-18)
+## Historical manual acceptance receipts (pre-inline-handoff)
 
 These manual receipts use an explicitly resolved isolated feature-wheel CLI,
 an owner-only StateStore, and disposable fixture roots. They do not establish
 per-child OS sandboxing or native `.toml` role loading; child cwd was not
-exposed by the TUI host and is recorded as `unverified`.
+exposed by the TUI host and is recorded as `unverified`. They predate the
+root-inline handoff interface and cannot satisfy this version's M02--M04
+release-candidate revalidation requirement.
 
 | Check | Observed result |
 | --- | --- |

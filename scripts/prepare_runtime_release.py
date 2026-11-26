@@ -33,9 +33,9 @@ TUI_NATIVE_SUBCOMMANDS = (
     "runtime-identity", "scan", "policy-observe", "capability-review", "batch-create", "tui-resume-locators", "resume",
     "tui-resume-candidates", "tui-workflow-disposition", "tui-review-handoff",
     "tui-proposal-handoff", "tui-proposal-draft-handoff", "tui-compose-assessed-proposal",
-    "tui-create-transient-root", "tui-record-review", "tui-record-child-dispatch-receipt",
+    "tui-create-transient-root", "tui-record-review", "tui-record-generated-dispatch-receipt", "tui-record-child-dispatch-failure", "tui-record-child-output-failure",
     "tui-child-dispatch-receipts", "tui-cleanup-transient-root", "tui-child-contract",
-    "tui-child-bootstrap", "patch-proposal",
+    "tui-inline-handoff", "patch-proposal",
 )
 VERSION_PATTERN = re.compile(r'^CLI_VERSION\s*=\s*"(?P<version>[^"]+)"\s*$', re.MULTILINE)
 
